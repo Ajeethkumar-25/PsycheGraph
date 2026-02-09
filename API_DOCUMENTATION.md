@@ -69,6 +69,19 @@ This document provides details on the available API endpoints and example reques
   "organization_id": 1
 }
 ```
+**Response** (includes tokens for immediate use):
+```json
+{
+  "id": 2,
+  "email": "doctor@healing.com",
+  "role": "DOCTOR",
+  "access_token": "eyJ...",
+  "refresh_token": "eyJ...",
+  "token_type": "bearer"
+}
+```
+
+> **Roles**: `SUPER_ADMIN`, `HOSPITAL` (formerly Admin), `DOCTOR`, `RECEPTIONIST`
 
 ### Get All Users
 **GET** `/users/`

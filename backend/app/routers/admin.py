@@ -23,22 +23,22 @@ async def create_organization(
         await db.rollback()
         raise HTTPException(status_code=400, detail="Organization already exists")
 
-# Super Admin & Admin: Create User
-@router.post("/users", response_model=schemas.UserOut)
+# Super Admin & HOSPITAL: Create User
+@router.post("/users", response_model=schemas.UserWithToken)
 async def create_user(
     user: schemas.UserCreate,
     current_user: models.User = Depends(dependencies.get_current_user),
     db: AsyncSession = Depends(database.get_db)
 ):
     # Logic: 
-    # SUPER_ADMIN can create ADMINs (and other roles if needed, but primarily Admins for Orgs)
-    # ADMIN can create DOCTORs and RECEPTIONISTs for THEIR OWN Organization
+    # SUPER_ADMIN can create HOSPITAL (and other roles)
+    # HOSPITAL can create DOCTORs and RECEPTIONISTs for THEIR OWN Organization
     
     if current_user.role == models.UserRole.SUPER_ADMIN:
         pass # Can create anyone
-    elif current_user.role == models.UserRole.ADMIN:
-        if user.role in [models.UserRole.SUPER_ADMIN, models.UserRole.ADMIN]:
-             raise HTTPException(status_code=403, detail="Admins cannot create other Admins or Super Admins")
+    elif current_user.role == models.UserRole.HOSPITAL:
+        if user.role in [models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL]:
+             raise HTTPException(status_code=403, detail="Hospitals cannot create other Hospitals or Super Admins")
         if user.organization_id != current_user.organization_id:
              raise HTTPException(status_code=403, detail="Cannot create user for another organization")
     else:
@@ -56,7 +56,25 @@ async def create_user(
     try:
         await db.commit()
         await db.refresh(new_user)
-        return new_user
+        
+        # Generate tokens for the new user
+        from datetime import timedelta
+        access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = auth.create_access_token(
+            data={"sub": new_user.email, "role": new_user.role},
+            expires_delta=access_token_expires
+        )
+        refresh_token = auth.create_refresh_token(
+            data={"sub": new_user.email, "role": new_user.role}
+        )
+        
+        # Construct response manually to include tokens + user fields
+        return schemas.UserWithToken(
+            **new_user.__dict__,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type="bearer"
+        )
     except Exception:
         await db.rollback()
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -96,7 +114,7 @@ async def get_user(
 async def update_user(
     user_id: int,
     user_update: schemas.UserUpdate,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.ADMIN])),
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
     db: AsyncSession = Depends(database.get_db)
 ):
     query = select(models.User).where(models.User.id == user_id)
@@ -122,7 +140,7 @@ async def update_user(
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     user_id: int,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.ADMIN])),
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
     db: AsyncSession = Depends(database.get_db)
 ):
     query = select(models.User).where(models.User.id == user_id)

@@ -35,6 +35,11 @@ class UserOut(UserBase):
     class Config:
         from_attributes = True
 
+class UserWithToken(UserOut):
+    access_token: str
+    refresh_token: str
+    token_type: str
+
 class OrganizationBase(BaseModel):
     name: str
     license_key: str

@@ -6,7 +6,7 @@ from .database import Base
 
 class UserRole(str, enum.Enum):
     SUPER_ADMIN = "SUPER_ADMIN"
-    ADMIN = "ADMIN"
+    HOSPITAL = "HOSPITAL"
     DOCTOR = "DOCTOR"
     RECEPTIONIST = "RECEPTIONIST"
 

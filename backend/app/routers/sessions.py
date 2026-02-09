@@ -111,7 +111,7 @@ async def get_session(
              # Or check if session's patient belongs to doctor?
              # For now strict ownership
              raise HTTPException(status_code=403, detail="Not authorized to view this session")
-    elif current_user.role == models.UserRole.ADMIN:
+    elif current_user.role == models.UserRole.HOSPITAL:
          # Check patient's org
          patient_res = await db.execute(select(models.Patient).where(models.Patient.id == session.patient_id))
          patient = patient_res.scalars().first()
@@ -152,7 +152,7 @@ async def update_session(
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_session(
     session_id: int,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.ADMIN, models.UserRole.SUPER_ADMIN])),
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.HOSPITAL, models.UserRole.SUPER_ADMIN])),
     db: AsyncSession = Depends(database.get_db)
 ):
     # Admins can delete sessions
