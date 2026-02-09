@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # PsycheGraph Project
 
 This is a monorepo containing the frontend and backend for the PsycheGraph project.
@@ -43,3 +44,6 @@ This is a monorepo containing the frontend and backend for the PsycheGraph proje
     ```bash
     uvicorn app.main:app --reload
     ```
+=======
+# PsycheGraph
+>>>>>>> 2effd12d98791ef844540b3a8f99c66f8e84795c
