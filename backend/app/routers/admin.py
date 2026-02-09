@@ -75,9 +75,11 @@ async def create_user(
             refresh_token=refresh_token,
             token_type="bearer"
         )
-    except Exception:
+    except Exception as e:
         await db.rollback()
-        raise HTTPException(status_code=400, detail="Email already registered")
+        # Print error to logs for debugging
+        print(f"Error creating user: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Error creating user: {str(e)}")
 
 @router.get("/users/", response_model=List[schemas.UserOut])
 async def get_users(
@@ -161,22 +163,34 @@ async def delete_user(
 async def get_organizations(
     skip: int = 0,
     limit: int = 100,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN])),
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
     db: AsyncSession = Depends(database.get_db)
 ):
-    result = await db.execute(select(models.Organization).offset(skip).limit(limit))
+    query = select(models.Organization)
+    
+    # HOSPITAL admins can only see their own organization
+    if current_user.role == models.UserRole.HOSPITAL:
+        query = query.where(models.Organization.id == current_user.organization_id)
+    
+    query = query.offset(skip).limit(limit)
+    result = await db.execute(query)
     return result.scalars().all()
 
 @router.get("/organizations/{org_id}", response_model=schemas.OrganizationOut)
 async def get_organization(
     org_id: int,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN])),
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
     db: AsyncSession = Depends(database.get_db)
 ):
     result = await db.execute(select(models.Organization).where(models.Organization.id == org_id))
     org = result.scalars().first()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
+    
+    # HOSPITAL admins can only view their own organization
+    if current_user.role == models.UserRole.HOSPITAL and org.id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Not authorized to view this organization")
+    
     return org
 
 @router.put("/organizations/{org_id}", response_model=schemas.OrganizationOut)

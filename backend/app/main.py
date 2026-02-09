@@ -73,7 +73,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # CORS
 origins = [
     "http://localhost:5173",
-    "http://localhost:3000",
+    "http://localhost:8000",
 ]
 
 app.add_middleware(

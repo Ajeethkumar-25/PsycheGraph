@@ -56,6 +56,20 @@ This document provides details on the available API endpoints and example reques
 }
 ```
 
+### Get Organizations
+**GET** `/organizations/`
+- **Headers**: `Authorization: Bearer <TOKEN>`
+- **Access**:
+    - **SUPER_ADMIN**: Views all organizations
+    - **HOSPITAL**: Views only their own organization
+
+### Get Organization by ID
+**GET** `/organizations/{id}`
+- **Headers**: `Authorization: Bearer <TOKEN>`
+- **Access**:
+    - **SUPER_ADMIN**: Can view any organization
+    - **HOSPITAL**: Can only view their own organization
+
 ### Create User (Hospital Admin / Doctor / Receptionist)
 **POST** `/users`
 - **Headers**: `Authorization: Bearer <TOKEN>`
