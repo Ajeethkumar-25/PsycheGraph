@@ -1,0 +1,112 @@
+from pydantic import BaseModel, EmailStr
+from typing import Optional, List
+from datetime import datetime
+from .models import UserRole
+
+class Token(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str
+
+class TokenRefresh(BaseModel):
+    refresh_token: str
+
+class TokenData(BaseModel):
+    email: Optional[str] = None
+
+class UserBase(BaseModel):
+    email: EmailStr
+    full_name: str
+    role: UserRole
+    is_active: Optional[bool] = True
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class UserCreate(UserBase):
+    password: str
+    organization_id: int
+
+class UserOut(UserBase):
+    id: int
+    organization_id: Optional[int] = None
+    
+    class Config:
+        from_attributes = True
+
+class OrganizationBase(BaseModel):
+    name: str
+    license_key: str
+
+class OrganizationCreate(OrganizationBase):
+    pass
+
+class OrganizationOut(OrganizationBase):
+    id: int
+    is_active: bool
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class PatientBase(BaseModel):
+    full_name: str
+    date_of_birth: datetime
+    contact_number: str
+    email: Optional[str] = None
+
+class PatientCreate(PatientBase):
+    pass
+
+class PatientOut(PatientBase):
+    id: int
+    organization_id: int
+    doctor_id: Optional[int]
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class SessionBase(BaseModel):
+    patient_id: int
+    doctor_id: int
+    date: datetime
+
+class SessionCreate(SessionBase):
+    pass
+
+class SessionOut(SessionBase):
+    id: int
+    audio_url: Optional[str]
+    transcript: Optional[str]
+    soap_note: Optional[str]
+    summary: Optional[str]
+    version: int
+    
+    class Config:
+        from_attributes = True
+
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = None
+    role: Optional[UserRole] = None
+    is_active: Optional[bool] = None
+    organization_id: Optional[int] = None
+    password: Optional[str] = None
+
+class OrganizationUpdate(BaseModel):
+    name: Optional[str] = None
+    license_key: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class PatientUpdate(BaseModel):
+    full_name: Optional[str] = None
+    date_of_birth: Optional[datetime] = None
+    contact_number: Optional[str] = None
+    email: Optional[str] = None
+    doctor_id: Optional[int] = None
+
+class SessionUpdate(BaseModel):
+    transcript: Optional[str] = None
+    soap_note: Optional[str] = None
+    summary: Optional[str] = None

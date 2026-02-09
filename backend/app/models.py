@@ -1,0 +1,102 @@
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Text, Enum
+from sqlalchemy.orm import relationship
+from datetime import datetime
+import enum
+from .database import Base
+
+class UserRole(str, enum.Enum):
+    SUPER_ADMIN = "SUPER_ADMIN"
+    ADMIN = "ADMIN"
+    DOCTOR = "DOCTOR"
+    RECEPTIONIST = "RECEPTIONIST"
+
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+    license_key = Column(String, unique=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    users = relationship("User", back_populates="organization")
+    patients = relationship("Patient", back_populates="organization")
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+    full_name = Column(String)
+    role = Column(Enum(UserRole))
+    is_active = Column(Boolean, default=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True) # Super Admin might be null
+    
+    organization = relationship("Organization", back_populates="users")
+    # For doctors
+    patients = relationship("Patient", back_populates="doctor") 
+    appointments_as_doctor = relationship("Appointment", back_populates="doctor")
+    sessions = relationship("Session", back_populates="doctor")
+
+class Patient(Base):
+    __tablename__ = "patients"
+
+    id = Column(Integer, primary_key=True, index=True)
+    full_name = Column(String, index=True)
+    date_of_birth = Column(DateTime)
+    contact_number = Column(String)
+    email = Column(String, nullable=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"))
+    doctor_id = Column(Integer, ForeignKey("users.id"), nullable=True) # Assigned doctor
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    organization = relationship("Organization", back_populates="patients")
+    doctor = relationship("User", back_populates="patients")
+    appointments = relationship("Appointment", back_populates="patient")
+    sessions = relationship("Session", back_populates="patient")
+
+class Appointment(Base):
+    __tablename__ = "appointments"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"))
+    doctor_id = Column(Integer, ForeignKey("users.id"))
+    start_time = Column(DateTime)
+    end_time = Column(DateTime)
+    status = Column(String, default="SCHEDULED") # SCHEDULED, COMPLETED, CANCELLED
+    notes = Column(Text, nullable=True)
+    
+    patient = relationship("Patient", back_populates="appointments")
+    doctor = relationship("User", back_populates="appointments_as_doctor")
+
+class Session(Base):
+    __tablename__ = "sessions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"))
+    doctor_id = Column(Integer, ForeignKey("users.id"))
+    date = Column(DateTime, default=datetime.utcnow)
+    
+    audio_url = Column(String, nullable=True)
+    transcript = Column(Text, nullable=True)
+    soap_note = Column(Text, nullable=True)
+    summary = Column(Text, nullable=True)
+    
+    # Versioning could be a separate table, but for simplicity we keep last version here + audit logs for changes
+    version = Column(Integer, default=1)
+    
+    patient = relationship("Patient", back_populates="sessions")
+    doctor = relationship("User", back_populates="sessions")
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    action = Column(String) # CREATE, READ, UPDATE, DELETE
+    resource_type = Column(String) # PATIENT, SESSION, USER
+    resource_id = Column(Integer)
+    details = Column(Text, nullable=True)
+    timestamp = Column(DateTime, default=datetime.utcnow)
