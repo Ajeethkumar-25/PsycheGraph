@@ -78,10 +78,16 @@ async def get_sessions(
 ):
     query = select(models.Session)
     
-    if current_user.role == models.UserRole.DOCTOR:
+    if current_user.role == models.UserRole.SUPER_ADMIN:
+        pass # Super Admin sees all sessions
+    elif current_user.role == models.UserRole.HOSPITAL:
+        # Hospital Admin sees sessions for their organization's patients
+        query = query.join(models.Patient).where(models.Patient.organization_id == current_user.organization_id)
+    elif current_user.role == models.UserRole.DOCTOR:
         query = query.where(models.Session.doctor_id == current_user.id)
-    elif current_user.role == models.UserRole.PATIENT: # If patients have access later
-        pass # Handle patient access
+    elif current_user.role == models.UserRole.PATIENT: 
+        # Future: query = query.where(models.Session.patient_id == current_user.patient_id)
+        pass
         
     if patient_id:
         query = query.where(models.Session.patient_id == patient_id)
@@ -106,7 +112,9 @@ async def get_session(
         raise HTTPException(status_code=404, detail="Session not found")
         
     # Permission check
-    if current_user.role == models.UserRole.DOCTOR:
+    if current_user.role == models.UserRole.SUPER_ADMIN:
+        pass # Super Admin has full access
+    elif current_user.role == models.UserRole.DOCTOR:
         if session.doctor_id != current_user.id:
              # Or check if session's patient belongs to doctor?
              # For now strict ownership
