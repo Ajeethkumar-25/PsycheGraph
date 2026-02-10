@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from .database import engine, Base
-from .routers import auth, admin, patients, sessions, appointments
+from .routers import auth, admin, patients, sessions, appointments, stats
 
 load_dotenv()
 
@@ -87,9 +87,13 @@ app.add_middleware(
 # Include Routers
 app.include_router(auth.router)
 app.include_router(admin.router)
+app.include_router(admin.hospital_router)
+app.include_router(admin.doctor_router)
+app.include_router(admin.receptionist_router)
 app.include_router(patients.router)
 app.include_router(sessions.router)
 app.include_router(appointments.router)
+app.include_router(stats.router)
 
 @app.get("/")
 def read_root():

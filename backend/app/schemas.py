@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List
+from typing import Optional, List, Union
 from datetime import datetime
 from .models import UserRole
 
@@ -31,6 +31,9 @@ class UserCreate(UserBase):
 class UserOut(UserBase):
     id: int
     organization_id: Optional[int] = None
+    specialization: Optional[str] = None
+    license_key: Optional[str] = None
+    shift_timing: Optional[str] = None
     
     class Config:
         from_attributes = True
@@ -40,9 +43,31 @@ class UserWithToken(UserOut):
     refresh_token: str
     token_type: str
 
+# Registration Schemas
+class RegistrationBase(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: str
+    license_key: str
+
+class HospitalRegister(RegistrationBase):
+    pass
+
+class DoctorRegister(RegistrationBase):
+    specialization: str
+
+class ReceptionistRegister(RegistrationBase):
+    specialization: str
+    shift_timing: str
+
+class RegisterResponse(BaseModel):
+    message: str
+    user_id: int
+    organization_id: int
+
 class OrganizationBase(BaseModel):
     name: str
-    license_key: str
+    license_key: Optional[str] = None
 
 class OrganizationCreate(OrganizationBase):
     pass

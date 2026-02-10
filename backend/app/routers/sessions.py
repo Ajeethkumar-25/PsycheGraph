@@ -8,6 +8,10 @@ import shutil
 import os
 import uuid
 from datetime import datetime
+import logging
+import traceback
+
+logger = logging.getLogger("sessions")
 
 router = APIRouter(prefix="/sessions", tags=["Sessions"])
 
@@ -81,7 +85,7 @@ async def create_session(
     
     return new_session
 
-@router.get("/", response_model=List[schemas.SessionOut])
+@router.get("", response_model=List[schemas.SessionOut])
 async def get_sessions(
     patient_id: Optional[int] = None,
     current_user: models.User = Depends(dependencies.get_current_user),
@@ -105,8 +109,13 @@ async def get_sessions(
     if patient_id:
         query = query.where(models.Session.patient_id == patient_id)
         
-    result = await db.execute(query)
-    return result.scalars().all()
+    try:
+        result = await db.execute(query)
+        return result.scalars().all()
+    except Exception as e:
+        logger.error(f"Error in get_sessions: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.get("/{session_id}", response_model=schemas.SessionOut)
 async def get_session(

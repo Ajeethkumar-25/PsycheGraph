@@ -34,7 +34,7 @@ async def create_patient(
     await db.refresh(new_patient)
     return new_patient
 
-@router.get("/", response_model=List[schemas.PatientOut])
+@router.get("", response_model=List[schemas.PatientOut])
 async def get_patients(
     current_user: models.User = Depends(dependencies.get_current_user),
     db: AsyncSession = Depends(database.get_db)

@@ -3,6 +3,12 @@ from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 import os
+import secrets
+import string
+
+def generate_license_key(length=8):
+    alphabet = string.ascii_uppercase + string.digits
+    return f"PG-{''.join(secrets.choice(alphabet) for _ in range(length))}"
 
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-keep-it-secret")
 ALGORITHM = "HS256"

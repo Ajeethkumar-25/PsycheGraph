@@ -33,6 +33,11 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True) # Super Admin might be null
     
+    # Role-specific fields
+    specialization = Column(String, nullable=True)
+    license_key = Column(String, nullable=True)
+    shift_timing = Column(String, nullable=True)
+    
     organization = relationship("Organization", back_populates="users")
     # For doctors
     patients = relationship("Patient", back_populates="doctor", foreign_keys="[Patient.doctor_id]") 

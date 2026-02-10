@@ -135,7 +135,7 @@ async def delete_availability_slot(
     await db.commit()
     return None
 
-@router.get("/", response_model=List[schemas.AppointmentOut])
+@router.get("", response_model=List[schemas.AppointmentOut])
 async def get_appointments(
     current_user: models.User = Depends(dependencies.get_current_user),
     db: AsyncSession = Depends(database.get_db)

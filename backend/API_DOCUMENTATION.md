@@ -11,18 +11,89 @@ This document describes the updated endpoints, access control rules, and providi
 
 ---
 
-## 1. Authentication
-
 ### [POST] `/token`
 - **Request**: `{ "email": "...", "password": "..." }`
 - **Response**: `UserWithToken`
 
+## 1. Authentication & Common
+### [POST] `/auth/token`
+- **Description**: Standard OAuth2 token endpoint. Recommended for **Super Admin** or general use.
+- **Request**: `grant_type`, `username`, `password`.
+- **Response**: `UserWithToken`
+
 ---
 
-## 2. Admin & User Management
+## 2. Hospital Admin Management (`Hospital Login`)
 
-### [POST] `/users`
-- **Hierarchy Rules**: `SUPER_ADMIN` -> `HOSPITAL` -> `DOCTOR`/`RECEPTIONIST`.
+### [POST] `/auth/register/hospital`
+- **Description**: Public registration for Hospital Admins.
+- **Request**: `{ "email", "password", "full_name", "license_key" }`
+- **Response**: `RegisterResponse`
+
+### [POST] `/auth/login/hospital`
+- **Description**: Dedicated login for Hospital Admins.
+- **Request**: `{ "email", "password" }`
+- **Response**: `UserWithToken`
+
+### Admin Endpoints (`/admin/hospitals`)
+- **GET** `/admin/hospitals`: List hospital admins (Super Admin only).
+- **PUT** `/admin/hospitals/{id}`: Update admin.
+- **DELETE** `/admin/hospitals/{id}`: Delete admin.
+
+---
+
+## 3. Doctor Management (`Doctor Login`)
+
+### [POST] `/auth/register/doctor`
+- **Description**: Public registration for Doctors.
+- **Request**: `{ "email", "password", "full_name", "license_key", "specialization", "license_number" }`
+- **Response**: `RegisterResponse`
+
+### [POST] `/auth/login/doctor`
+- **Description**: Dedicated login for Doctors.
+- **Request**: `{ "email", "password" }`
+- **Response**: `UserWithToken`
+
+### Admin Endpoints (`/admin/doctors`)
+- **POST** `/admin/doctors`: Internal creation (Admin only).
+- **GET** `/admin/doctors`: List doctors (org-filtered).
+- **GET** `/admin/doctors/{id}`, **PUT**, **DELETE**
+
+---
+
+## 4. Receptionist Management (`Receptionist Login`)
+
+### [POST] `/auth/register/receptionist`
+- **Description**: Public registration for Receptionists.
+- **Request**: `{ "email", "password", "full_name", "license_key", "specialization", "license_number", "shift_timing" }`
+- **Response**: `RegisterResponse`
+
+### [POST] `/auth/login/receptionist`
+- **Description**: Dedicated login for Receptionists.
+- **Request**: `{ "email", "password" }`
+- **Response**: `UserWithToken`
+
+### Admin Endpoints (`/admin/receptionists`)
+- **POST** `/admin/receptionists`: Internal creation (Admin only).
+- **GET** `/admin/receptionists`: List receptionists (org-filtered).
+- **GET** `/admin/receptionists/{id}`, **PUT**, **DELETE**
+
+---
+
+## Shared Schema: `UserOut`
+```json
+{
+  "id": 1,
+  "email": "user@example.com",
+  "full_name": "John Doe",
+  "role": "DOCTOR",
+  "is_active": true,
+  "organization_id": 1,
+  "specialization": "...",
+  "license_number": "...",
+  "shift_timing": "..."
+}
+```
 
 ---
 
