@@ -21,8 +21,8 @@ async def init_data():
             await db.refresh(org)
         
         # Dynamic Super Admin Credentials
-        admin_email = os.getenv("SUPER_ADMIN_EMAIL", "admin@gmail.com")
-        admin_password = os.getenv("SUPER_ADMIN_PASSWORD", "Admin@123")
+        admin_email = os.getenv("SUPER_ADMIN_EMAIL", "")
+        admin_password = os.getenv("SUPER_ADMIN_PASSWORD", "")
 
         # Check if Super Admin exists
         result = await db.execute(select(models.User).where(models.User.email == admin_email))
