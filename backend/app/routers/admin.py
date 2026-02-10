@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from typing import List
+from typing import List, Optional
 from .. import models, schemas, auth, dependencies, database
 
 router = APIRouter(tags=["Admin"])
@@ -31,14 +31,15 @@ async def create_user(
     db: AsyncSession = Depends(database.get_db)
 ):
     # Logic: 
-    # SUPER_ADMIN can create HOSPITAL (and other roles)
-    # HOSPITAL can create DOCTORs and RECEPTIONISTs for THEIR OWN Organization
+    # SUPER_ADMIN can only create HOSPITAL admin
+    # HOSPITAL can only create DOCTORs and RECEPTIONISTs for THEIR OWN Organization
     
     if current_user.role == models.UserRole.SUPER_ADMIN:
-        pass # Can create anyone
+        if user.role != models.UserRole.HOSPITAL:
+             raise HTTPException(status_code=403, detail="Super Admin can only create Hospital Admin accounts")
     elif current_user.role == models.UserRole.HOSPITAL:
-        if user.role in [models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL]:
-             raise HTTPException(status_code=403, detail="Hospitals cannot create other Hospitals or Super Admins")
+        if user.role not in [models.UserRole.DOCTOR, models.UserRole.RECEPTIONIST]:
+             raise HTTPException(status_code=403, detail="Hospital Admins can only create Doctors and Receptionists")
         if user.organization_id != current_user.organization_id:
              raise HTTPException(status_code=403, detail="Cannot create user for another organization")
     else:
@@ -60,17 +61,26 @@ async def create_user(
         # Generate tokens for the new user
         from datetime import timedelta
         access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
+        
+        # Ensure role is string for JWT
+        role_str = new_user.role.value if hasattr(new_user.role, "value") else str(new_user.role)
+        
         access_token = auth.create_access_token(
-            data={"sub": new_user.email, "role": new_user.role},
+            data={"sub": new_user.email, "role": role_str},
             expires_delta=access_token_expires
         )
         refresh_token = auth.create_refresh_token(
-            data={"sub": new_user.email, "role": new_user.role}
+            data={"sub": new_user.email, "role": role_str}
         )
         
         # Construct response manually to include tokens + user fields
         return schemas.UserWithToken(
-            **new_user.__dict__,
+            id=new_user.id,
+            email=new_user.email,
+            full_name=new_user.full_name,
+            role=new_user.role,
+            organization_id=new_user.organization_id,
+            is_active=new_user.is_active,
             access_token=access_token,
             refresh_token=refresh_token,
             token_type="bearer"
@@ -85,12 +95,25 @@ async def create_user(
 async def get_users(
     skip: int = 0,
     limit: int = 100,
+    organization_id: Optional[int] = None,
+    role: Optional[models.UserRole] = None,
     current_user: models.User = Depends(dependencies.get_current_user),
     db: AsyncSession = Depends(database.get_db)
 ):
     query = select(models.User)
-    if current_user.role != models.UserRole.SUPER_ADMIN:
-        query = query.where(models.User.organization_id == current_user.organization_id)
+    if current_user.role == models.UserRole.SUPER_ADMIN:
+        if organization_id:
+            query = query.where(models.User.organization_id == organization_id)
+        if role:
+            query = query.where(models.User.role == role)
+    elif current_user.role == models.UserRole.HOSPITAL:
+        # Hospital admin can only see Doctors and Receptionists in their org
+        query = query.where(
+            models.User.organization_id == current_user.organization_id,
+            models.User.role.in_([models.UserRole.DOCTOR, models.UserRole.RECEPTIONIST])
+        )
+    else:
+        raise HTTPException(status_code=403, detail="Not authorized to list users")
     
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
@@ -103,8 +126,18 @@ async def get_user(
     db: AsyncSession = Depends(database.get_db)
 ):
     query = select(models.User).where(models.User.id == user_id)
-    if current_user.role != models.UserRole.SUPER_ADMIN:
-        query = query.where(models.User.organization_id == current_user.organization_id)
+    if current_user.role == models.UserRole.SUPER_ADMIN:
+        pass # sees all
+    elif current_user.role == models.UserRole.HOSPITAL:
+        # Hospital admin can only see Doctors and Receptionists in their org
+        query = query.where(
+            models.User.organization_id == current_user.organization_id,
+            models.User.role.in_([models.UserRole.DOCTOR, models.UserRole.RECEPTIONIST])
+        )
+    else:
+        # Doctors/Receptionists can only see themselves
+        if user_id != current_user.id:
+             raise HTTPException(status_code=403, detail="Not authorized to view this user")
     
     result = await db.execute(query)
     user = result.scalars().first()
@@ -120,8 +153,19 @@ async def update_user(
     db: AsyncSession = Depends(database.get_db)
 ):
     query = select(models.User).where(models.User.id == user_id)
-    if current_user.role != models.UserRole.SUPER_ADMIN:
-        query = query.where(models.User.organization_id == current_user.organization_id)
+    if current_user.role == models.UserRole.SUPER_ADMIN:
+        pass # full access
+    elif current_user.role == models.UserRole.HOSPITAL:
+        # Can only update Doctors/Receptionists in their org
+        query = query.where(
+            models.User.organization_id == current_user.organization_id,
+            models.User.role.in_([models.UserRole.DOCTOR, models.UserRole.RECEPTIONIST])
+        )
+    else:
+        # Doctors/Receptionists can only update themselves (if allowed by dependencies, but here it's restricted to ADMIN/HOSPITAL)
+        # But per requirements "PUT own data by doctor/receptionist"
+        if user_id != current_user.id:
+             raise HTTPException(status_code=403, detail="Not authorized to update this user")
     
     result = await db.execute(query)
     user = result.scalars().first()
@@ -146,8 +190,16 @@ async def delete_user(
     db: AsyncSession = Depends(database.get_db)
 ):
     query = select(models.User).where(models.User.id == user_id)
-    if current_user.role != models.UserRole.SUPER_ADMIN:
-        query = query.where(models.User.organization_id == current_user.organization_id)
+    if current_user.role == models.UserRole.SUPER_ADMIN:
+        pass
+    elif current_user.role == models.UserRole.HOSPITAL:
+        # Can only delete Doctors/Receptionists in their org
+        query = query.where(
+            models.User.organization_id == current_user.organization_id,
+            models.User.role.in_([models.UserRole.DOCTOR, models.UserRole.RECEPTIONIST])
+        )
+    else:
+        raise HTTPException(status_code=403, detail="Not authorized to delete users")
         
     result = await db.execute(query)
     user = result.scalars().first()

@@ -62,7 +62,7 @@ class PatientBase(BaseModel):
     email: Optional[str] = None
 
 class PatientCreate(PatientBase):
-    pass
+    organization_id: Optional[int] = None
 
 class PatientOut(PatientBase):
     id: int
@@ -110,6 +110,47 @@ class PatientUpdate(BaseModel):
     contact_number: Optional[str] = None
     email: Optional[str] = None
     doctor_id: Optional[int] = None
+
+class AvailabilityBase(BaseModel):
+    start_time: datetime
+    end_time: datetime
+
+class AvailabilityCreate(AvailabilityBase):
+    doctor_id: int
+    organization_id: Optional[int] = None
+
+class AvailabilityOut(AvailabilityBase):
+    id: int
+    doctor_id: int
+    organization_id: int
+    is_booked: bool
+
+    class Config:
+        from_attributes = True
+
+class AppointmentBase(BaseModel):
+    patient_id: int
+    doctor_id: int
+    start_time: datetime
+    end_time: datetime
+    notes: Optional[str] = None
+    meet_link: Optional[str] = None
+
+class AppointmentCreate(AppointmentBase):
+    availability_id: int # The slot being booked
+
+class AppointmentOut(AppointmentBase):
+    id: int
+    status: str
+    organization_id: int
+
+    class Config:
+        from_attributes = True
+
+class AppointmentUpdate(BaseModel):
+    status: Optional[str] = None
+    notes: Optional[str] = None
+    meet_link: Optional[str] = None
 
 class SessionUpdate(BaseModel):
     transcript: Optional[str] = None

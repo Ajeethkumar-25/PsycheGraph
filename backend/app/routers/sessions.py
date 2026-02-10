@@ -18,9 +18,19 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 async def create_session(
     patient_id: int = Form(...),
     file: UploadFile = File(...),
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.DOCTOR])),
+    doctor_id: Optional[int] = Form(None), # Required if Hospital Admin is creating
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.DOCTOR, models.UserRole.HOSPITAL, models.UserRole.SUPER_ADMIN])),
     db: AsyncSession = Depends(database.get_db)
 ):
+    # Logic: Doctors create for their patients, Hospital admin creates for their org
+    if current_user.role == models.UserRole.DOCTOR:
+        actual_doctor_id = current_user.id
+    elif current_user.role in [models.UserRole.HOSPITAL, models.UserRole.SUPER_ADMIN]:
+        if not doctor_id:
+            raise HTTPException(status_code=400, detail="doctor_id is required when Admin creates a session")
+        actual_doctor_id = doctor_id
+    else:
+        raise HTTPException(status_code=403, detail="Not authorized")
     # Verify patient belongs to doctor or org
     stmt = select(models.Patient).where(models.Patient.id == patient_id)
     result = await db.execute(stmt)
@@ -56,7 +66,8 @@ async def create_session(
 
     new_session = models.Session(
         patient_id=patient_id,
-        doctor_id=current_user.id,
+        doctor_id=actual_doctor_id,
+        created_by_id=current_user.id,
         date=datetime.utcnow(),
         audio_url=file_path,
         transcript=processed_data.get("english_translation", ""),
@@ -85,9 +96,11 @@ async def get_sessions(
         query = query.join(models.Patient).where(models.Patient.organization_id == current_user.organization_id)
     elif current_user.role == models.UserRole.DOCTOR:
         query = query.where(models.Session.doctor_id == current_user.id)
-    elif current_user.role == models.UserRole.PATIENT: 
-        # Future: query = query.where(models.Session.patient_id == current_user.patient_id)
-        pass
+    elif current_user.role == models.UserRole.RECEPTIONIST: 
+        # Receptionist sees sessions for patients they created
+        query = query.join(models.Patient).where(models.Patient.created_by_id == current_user.id)
+    else:
+        raise HTTPException(status_code=403, detail="Not authorized")
         
     if patient_id:
         query = query.where(models.Session.patient_id == patient_id)
@@ -114,17 +127,23 @@ async def get_session(
     # Permission check
     if current_user.role == models.UserRole.SUPER_ADMIN:
         pass # Super Admin has full access
-    elif current_user.role == models.UserRole.DOCTOR:
-        if session.doctor_id != current_user.id:
-             # Or check if session's patient belongs to doctor?
-             # For now strict ownership
-             raise HTTPException(status_code=403, detail="Not authorized to view this session")
     elif current_user.role == models.UserRole.HOSPITAL:
          # Check patient's org
          patient_res = await db.execute(select(models.Patient).where(models.Patient.id == session.patient_id))
          patient = patient_res.scalars().first()
          if not patient or patient.organization_id != current_user.organization_id:
               raise HTTPException(status_code=403, detail="Not authorized")
+    elif current_user.role == models.UserRole.DOCTOR:
+        if session.doctor_id != current_user.id:
+             raise HTTPException(status_code=403, detail="Not authorized to view this session")
+    elif current_user.role == models.UserRole.RECEPTIONIST:
+         # Check if patient was created by this receptionist
+         patient_res = await db.execute(select(models.Patient).where(models.Patient.id == session.patient_id))
+         patient = patient_res.scalars().first()
+         if not patient or patient.created_by_id != current_user.id:
+              raise HTTPException(status_code=403, detail="Not authorized")
+    else:
+         raise HTTPException(status_code=403, detail="Not authorized")
               
     return session
 
@@ -143,8 +162,20 @@ async def update_session(
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
         
-    if session.doctor_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to update this session")
+    # Who can update: Super Admin, Hospital Admin (all in org), Doctor (their own)
+    if current_user.role == models.UserRole.SUPER_ADMIN:
+        pass
+    elif current_user.role == models.UserRole.HOSPITAL:
+        # Check org
+        patient_res = await db.execute(select(models.Patient).where(models.Patient.id == session.patient_id))
+        patient = patient_res.scalars().first()
+        if not patient or patient.organization_id != current_user.organization_id:
+             raise HTTPException(status_code=403, detail="Not authorized")
+    elif current_user.role == models.UserRole.DOCTOR:
+        if session.doctor_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to update this session")
+    else:
+        raise HTTPException(status_code=403, detail="Not authorized")
         
     update_data = session_update.model_dump(exclude_unset=True)
     for key, value in update_data.items():

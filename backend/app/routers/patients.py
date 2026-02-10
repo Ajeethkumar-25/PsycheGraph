@@ -12,12 +12,23 @@ async def create_patient(
     current_user: models.User = Depends(dependencies.require_role([models.UserRole.RECEPTIONIST, models.UserRole.HOSPITAL])),
     db: AsyncSession = Depends(database.get_db)
 ):
-    # Receptionist can only create patients for their own org
-    if current_user.organization_id != patient.organization_id and current_user.role != models.UserRole.SUPER_ADMIN:
-         # Force org_id to match current user's org
-         patient.organization_id = current_user.organization_id
+    # Logic: Hospital admin can create for their org, Receptionist for their org
+    # Super Admin must provide organization_id
+    org_id = patient.organization_id
+    if current_user.role != models.UserRole.SUPER_ADMIN:
+         org_id = current_user.organization_id
     
-    new_patient = models.Patient(**patient.model_dump())
+    if not org_id:
+         raise HTTPException(status_code=400, detail="organization_id is required")
+
+    new_patient = models.Patient(
+        full_name=patient.full_name,
+        date_of_birth=patient.date_of_birth,
+        contact_number=patient.contact_number,
+        email=patient.email,
+        organization_id=org_id,
+        created_by_id=current_user.id
+    )
     db.add(new_patient)
     await db.commit()
     await db.refresh(new_patient)
@@ -35,8 +46,18 @@ async def get_patients(
     # DOCTOR: Assigned patients OR All in Org (depending on detailed reqs, usually all in org for visibility)
     
     query = select(models.Patient)
-    if current_user.role != models.UserRole.SUPER_ADMIN:
+    if current_user.role == models.UserRole.SUPER_ADMIN:
+        pass # All
+    elif current_user.role == models.UserRole.HOSPITAL:
         query = query.where(models.Patient.organization_id == current_user.organization_id)
+    elif current_user.role == models.UserRole.DOCTOR:
+        # Assigned patients
+        query = query.where(models.Patient.doctor_id == current_user.id)
+    elif current_user.role == models.UserRole.RECEPTIONIST:
+        # Own patients (created by them)
+        query = query.where(models.Patient.created_by_id == current_user.id)
+    else:
+        raise HTTPException(status_code=403, detail="Not authorized")
         
     result = await db.execute(query)
     return result.scalars().all()
@@ -48,8 +69,16 @@ async def get_patient(
     db: AsyncSession = Depends(database.get_db)
 ):
     query = select(models.Patient).where(models.Patient.id == patient_id)
-    if current_user.role != models.UserRole.SUPER_ADMIN:
+    if current_user.role == models.UserRole.SUPER_ADMIN:
+        pass
+    elif current_user.role == models.UserRole.HOSPITAL:
         query = query.where(models.Patient.organization_id == current_user.organization_id)
+    elif current_user.role == models.UserRole.DOCTOR:
+        query = query.where(models.Patient.doctor_id == current_user.id)
+    elif current_user.role == models.UserRole.RECEPTIONIST:
+        query = query.where(models.Patient.created_by_id == current_user.id)
+    else:
+        raise HTTPException(status_code=403, detail="Not authorized")
         
     result = await db.execute(query)
     patient = result.scalars().first()
@@ -65,8 +94,15 @@ async def update_patient(
     db: AsyncSession = Depends(database.get_db)
 ):
     query = select(models.Patient).where(models.Patient.id == patient_id)
-    if current_user.role != models.UserRole.SUPER_ADMIN:
+    if current_user.role == models.UserRole.SUPER_ADMIN:
+         pass
+    elif current_user.role == models.UserRole.HOSPITAL:
          query = query.where(models.Patient.organization_id == current_user.organization_id)
+    elif current_user.role == models.UserRole.RECEPTIONIST:
+         query = query.where(models.Patient.created_by_id == current_user.id)
+    else:
+         # Doctors cannot update patients in this implementation unless specified
+         raise HTTPException(status_code=403, detail="Not authorized to update patient data")
          
     result = await db.execute(query)
     patient = result.scalars().first()
@@ -88,8 +124,12 @@ async def delete_patient(
     db: AsyncSession = Depends(database.get_db)
 ):
     query = select(models.Patient).where(models.Patient.id == patient_id)
-    if current_user.role != models.UserRole.SUPER_ADMIN:
+    if current_user.role == models.UserRole.SUPER_ADMIN:
+         pass
+    elif current_user.role == models.UserRole.HOSPITAL:
          query = query.where(models.Patient.organization_id == current_user.organization_id)
+    else:
+         raise HTTPException(status_code=403, detail="Only Admins can delete patients")
          
     result = await db.execute(query)
     patient = result.scalars().first()

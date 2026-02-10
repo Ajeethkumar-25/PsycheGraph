@@ -35,9 +35,13 @@ class User(Base):
     
     organization = relationship("Organization", back_populates="users")
     # For doctors
-    patients = relationship("Patient", back_populates="doctor") 
+    patients = relationship("Patient", back_populates="doctor", foreign_keys="[Patient.doctor_id]") 
     appointments_as_doctor = relationship("Appointment", back_populates="doctor")
-    sessions = relationship("Session", back_populates="doctor")
+    sessions = relationship("Session", back_populates="doctor", foreign_keys="[Session.doctor_id]")
+    
+    # Tracking record creation
+    patients_created = relationship("Patient", back_populates="created_by", foreign_keys="[Patient.created_by_id]")
+    sessions_created = relationship("Session", back_populates="created_by", foreign_keys="[Session.created_by_id]")
 
 class Patient(Base):
     __tablename__ = "patients"
@@ -49,11 +53,13 @@ class Patient(Base):
     email = Column(String, nullable=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"))
     doctor_id = Column(Integer, ForeignKey("users.id"), nullable=True) # Assigned doctor
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True) # Who registered the patient
     
     created_at = Column(DateTime, default=datetime.utcnow)
     
     organization = relationship("Organization", back_populates="patients")
-    doctor = relationship("User", back_populates="patients")
+    doctor = relationship("User", back_populates="patients", foreign_keys=[doctor_id])
+    created_by = relationship("User", back_populates="patients_created", foreign_keys=[created_by_id])
     appointments = relationship("Appointment", back_populates="patient")
     sessions = relationship("Session", back_populates="patient")
 
@@ -63,13 +69,28 @@ class Appointment(Base):
     id = Column(Integer, primary_key=True, index=True)
     patient_id = Column(Integer, ForeignKey("patients.id"))
     doctor_id = Column(Integer, ForeignKey("users.id"))
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
     start_time = Column(DateTime)
     end_time = Column(DateTime)
     status = Column(String, default="SCHEDULED") # SCHEDULED, COMPLETED, CANCELLED
     notes = Column(Text, nullable=True)
+    meet_link = Column(String, nullable=True)
     
     patient = relationship("Patient", back_populates="appointments")
     doctor = relationship("User", back_populates="appointments_as_doctor")
+
+class Availability(Base):
+    __tablename__ = "availabilities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    doctor_id = Column(Integer, ForeignKey("users.id"))
+    organization_id = Column(Integer, ForeignKey("organizations.id"))
+    start_time = Column(DateTime)
+    end_time = Column(DateTime)
+    is_booked = Column(Boolean, default=False)
+
+    doctor = relationship("User", backref="availability_slots")
+    organization = relationship("Organization")
 
 class Session(Base):
     __tablename__ = "sessions"
@@ -77,6 +98,7 @@ class Session(Base):
     id = Column(Integer, primary_key=True, index=True)
     patient_id = Column(Integer, ForeignKey("patients.id"))
     doctor_id = Column(Integer, ForeignKey("users.id"))
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True) # Who created the session
     date = Column(DateTime, default=datetime.utcnow)
     
     audio_url = Column(String, nullable=True)
@@ -88,7 +110,8 @@ class Session(Base):
     version = Column(Integer, default=1)
     
     patient = relationship("Patient", back_populates="sessions")
-    doctor = relationship("User", back_populates="sessions")
+    doctor = relationship("User", back_populates="sessions", foreign_keys=[doctor_id])
+    created_by = relationship("User", back_populates="sessions_created", foreign_keys=[created_by_id])
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
