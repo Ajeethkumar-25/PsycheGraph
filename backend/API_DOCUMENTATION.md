@@ -1,155 +1,187 @@
-# PsycheGraph - API Documentation (Hierarchical RBAC + Scheduling)
+# PsycheGraph - API Documentation
 
-This document describes the updated endpoints, access control rules, and providing exact Request/Response formats.
+Detailed Request and Response formats for all major endpoints.
 
-## Roles Overview
-
-1.  **SUPER_ADMIN**: Global access. Can create Hospital Admins.
-2.  **HOSPITAL**: Organization-wide access. Can create Doctors and Receptionists.
-3.  **DOCTOR**: Restricted to "Own Data" (Assigned Patients/Sessions/Appointments).
-4.  **RECEPTIONIST**: Restricted to "Own Data" (Patients/Sessions/Appointments in their Org).
+## Base URL
+`http://127.0.0.1:8000`
 
 ---
 
-### [POST] `/token`
-- **Request**: `{ "email": "...", "password": "..." }`
-- **Response**: `UserWithToken`
+## 1. Authentication
 
-## 1. Authentication & Common
 ### [POST] `/auth/token`
-- **Description**: Standard OAuth2 token endpoint. Recommended for **Super Admin** or general use.
-- **Request**: `grant_type`, `username`, `password`.
-- **Response**: `UserWithToken`
-
----
-
-## 2. Hospital Admin Management (`Hospital Login`)
-
-### [POST] `/auth/register/hospital`
-- **Description**: Public registration for Hospital Admins.
-- **Request**: `{ "email", "password", "full_name", "license_key" }`
-- **Response**: `RegisterResponse`
-
-### [POST] `/auth/login/hospital`
-- **Description**: Dedicated login for Hospital Admins.
-- **Request**: `{ "email", "password" }`
-- **Response**: `UserWithToken`
-
-### Admin Endpoints (`/admin/hospitals`)
-- **GET** `/admin/hospitals`: List hospital admins (Super Admin only).
-- **PUT** `/admin/hospitals/{id}`: Update admin.
-- **DELETE** `/admin/hospitals/{id}`: Delete admin.
-
----
-
-## 3. Doctor Management (`Doctor Login`)
-
-### [POST] `/auth/register/doctor`
-- **Description**: Public registration for Doctors.
-- **Request**: `{ "email", "password", "full_name", "license_key", "specialization", "license_number" }`
-- **Response**: `RegisterResponse`
-
-### [POST] `/auth/login/doctor`
-- **Description**: Dedicated login for Doctors.
-- **Request**: `{ "email", "password" }`
-- **Response**: `UserWithToken`
-
-### Admin Endpoints (`/admin/doctors`)
-- **POST** `/admin/doctors`: Internal creation (Admin only).
-- **GET** `/admin/doctors`: List doctors (org-filtered).
-- **GET** `/admin/doctors/{id}`, **PUT**, **DELETE**
-
----
-
-## 4. Receptionist Management (`Receptionist Login`)
-
-### [POST] `/auth/register/receptionist`
-- **Description**: Public registration for Receptionists.
-- **Request**: `{ "email", "password", "full_name", "license_key", "specialization", "license_number", "shift_timing" }`
-- **Response**: `RegisterResponse`
-
-### [POST] `/auth/login/receptionist`
-- **Description**: Dedicated login for Receptionists.
-- **Request**: `{ "email", "password" }`
-- **Response**: `UserWithToken`
-
-### Admin Endpoints (`/admin/receptionists`)
-- **POST** `/admin/receptionists`: Internal creation (Admin only).
-- **GET** `/admin/receptionists`: List receptionists (org-filtered).
-- **GET** `/admin/receptionists/{id}`, **PUT**, **DELETE**
-
----
-
-## Shared Schema: `UserOut`
+**Description**: Standard login to get access and refresh tokens.
+**Request**:
+```json
+{
+  "email": "user@example.com",
+  "password": "password123"
+}
+```
+**Response (UserWithToken)**:
 ```json
 {
   "id": 1,
   "email": "user@example.com",
   "full_name": "John Doe",
-  "role": "DOCTOR",
+  "role": "SUPER_ADMIN",
   "is_active": true,
-  "organization_id": 1,
-  "specialization": "...",
-  "license_number": "...",
-  "shift_timing": "..."
+  "organization_id": null,
+  "access_token": "eyJhbG...",
+  "refresh_token": "eyJhbG...",
+  "token_type": "bearer"
 }
 ```
+
+### [POST] `/auth/login/{role}`
+**Path Params**: `role` (hospital, doctor, receptionist)
+**Description**: Dedicated login for specific roles. Fails if user role does not match.
+**Request**: Same as `/auth/token`.
+**Response**: Same as `UserWithToken`.
+
+---
+
+## 2. Registration
+
+### [POST] `/auth/register/hospital`
+**Request**:
+```json
+{
+  "email": "admin@hospital.com",
+  "password": "password123",
+  "full_name": "Hospital Admin",
+  "license_key": "ORG_LICENSE_XYZ"
+}
+```
+**Response (RegisterResponse)**:
+```json
+{
+  "message": "hospital registered successfully",
+  "user_id": 2,
+  "organization_id": 5
+}
+```
+
+### [POST] `/auth/register/doctor`
+**Request**:
+```json
+{
+  "email": "doctor@hospital.com",
+  "password": "password123",
+  "full_name": "Dr. Smith",
+  "license_key": "ORG_LICENSE_XYZ",
+  "specialization": "Psychiatry"
+}
+```
+**Response**: Same as `RegisterResponse`.
+
+### [POST] `/auth/register/receptionist`
+**Request**:
+```json
+{
+  "email": "recep@hospital.com",
+  "password": "password123",
+  "full_name": "Receptionist Jane",
+  "license_key": "ORG_LICENSE_XYZ",
+  "specialization": "Administration",
+  "shift_timing": "9 AM - 5 PM"
+}
+```
+**Response**: Same as `RegisterResponse`.
 
 ---
 
 ## 3. Patient Management
 
-### [POST] `/patients/`
-- **Roles**: `HOSPITAL`, `RECEPTIONIST`, `SUPER_ADMIN`.
-- **Note**: `organization_id` is auto-filled for non-admins.
+### [GET] `/patients/`
+**Response**: `List[PatientOut]`
+```json
+[
+  {
+    "full_name": "Patient Name",
+    "date_of_birth": "1990-01-01T00:00:00",
+    "contact_number": "1234567890",
+    "email": "patient@email.com",
+    "id": 1,
+    "organization_id": 5,
+    "doctor_id": null,
+    "created_at": "2024-02-10T12:00:00"
+  }
+]
+```
 
 ---
 
-## 4. Session Management
+## 4. Scheduling & Appointments
 
-### [POST] `/sessions/`
-- **Roles**: `DOCTOR`, `HOSPITAL`, `SUPER_ADMIN`.
-- **Logic**: Recording -> Upload -> AI Translation/Summary.
-
----
-
-## 5. Appointment & Scheduling (`/appointments`)
-
-### [POST] `/availability`
-- **Role**: `DOCTOR` (own slots), `RECEPTIONIST`/`HOSPITAL` (org-wide slots).
-- **Request**:
+### [POST] `/appointments/availability`
+**Request**:
 ```json
 {
   "doctor_id": 2,
   "start_time": "2024-02-12T10:00:00",
+  "end_time": "2024-02-12T10:30:00"
+}
+```
+**Response (AvailabilityOut)**:
+```json
+{
+  "id": 101,
+  "doctor_id": 2,
+  "organization_id": 5,
+  "start_time": "2024-02-12T10:00:00",
   "end_time": "2024-02-12T10:30:00",
-  "organization_id": 1
+  "is_booked": false
 }
 ```
 
-### [GET] `/availability`
-- **Description**: Query parameters `doctor_id`, `organization_id`, `only_available` (default true).
-
-### [POST] `/book`
-- **Roles**: Everyone (Patients/Receptionists).
-- **Request**:
+### [POST] `/appointments/book`
+**Request (AppointmentCreate)**:
 ```json
 {
   "availability_id": 101,
-  "patient_id": 10,
+  "patient_id": 1,
   "doctor_id": 2,
-  "start_time": "...", 
-  "end_time": "...",
-  "notes": "Concern about sleep pattern"
+  "start_time": "2024-02-12T10:00:00",
+  "end_time": "2024-02-12T10:30:00",
+  "notes": "Follow-up",
+  "meet_link": "https://meet.google.com/..."
 }
 ```
-- **Response**: Returns `AppointmentOut` with a **unique telehealth `meet_link`**.
+**Response (AppointmentOut)**:
+```json
+{
+  "id": 50,
+  "status": "BOOKED",
+  "organization_id": 5,
+  "patient_id": 1,
+  "doctor_id": 2,
+  "start_time": "2024-02-12T10:00:00",
+  "end_time": "2024-02-12T10:30:00",
+  "notes": "Follow-up",
+  "meet_link": "https://meet.google.com/..."
+}
+```
 
-### [DELETE] `/availability/{slot_id}`
-- **Behavior**: If the slot is deleted, any **linked appointment is automatically set to `CANCELLED`**.
+---
 
-### [GET] `/`
-- **Scope**:
-    - `SUPER_ADMIN`/`HOSPITAL`: View org-wide.
-    - `DOCTOR`: View their booked slots.
-    - `RECEPTIONIST`: View org-wide.
+## 5. Stats & Dashboard
+
+### [GET] `/stats/`
+**Description**: Returns dynamic stats based on the role of the logged-in user.
+**Response**:
+```json
+[
+  {
+    "label": "Total Organizations",
+    "value": "12",
+    "type": "orgs"
+  },
+  {
+    "label": "Global Users",
+    "value": "150",
+    "type": "users"
+  }
+]
+```
+*(Labels and values vary by user role: Hospital Admins see medical staff/patient counts; Doctors see patient/session counts).*
