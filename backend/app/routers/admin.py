@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from .. import models, schemas, auth, dependencies, database
 
@@ -215,6 +216,18 @@ async def create_receptionist(
     
     if current_user.role == models.UserRole.HOSPITAL and org.id != current_user.organization_id:
         raise HTTPException(status_code=403, detail="License key does not match your organization")
+    
+    # Validate doctor_id if provided
+    if user.doctor_id:
+        doc_res = await db.execute(
+            select(models.User).where(
+                models.User.id == user.doctor_id,
+                models.User.role == models.UserRole.DOCTOR,
+                models.User.organization_id == org.id
+            )
+        )
+        if not doc_res.scalars().first():
+            raise HTTPException(status_code=400, detail="Invalid doctor_id for this organization")
 
     new_user = models.User(
         email=user.email,
@@ -235,10 +248,38 @@ async def create_receptionist(
 async def list_receptionists(
     skip: int = 0,
     limit: int = 100,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
+    current_user: models.User = Depends(
+        dependencies.require_role([
+            models.UserRole.SUPER_ADMIN,
+            models.UserRole.HOSPITAL
+        ])
+    ),
     db: AsyncSession = Depends(database.get_db)
 ):
-    return await get_role_users(models.UserRole.RECEPTIONIST, skip, limit, current_user, db)
+    query = (
+        select(models.User)
+        .options(selectinload(models.User.receptionist_profile))
+        .where(models.User.role == models.UserRole.RECEPTIONIST)
+        .offset(skip)
+        .limit(limit)
+    )
+
+    if current_user.role == models.UserRole.HOSPITAL:
+        query = query.where(
+            models.User.organization_id == current_user.organization_id
+        )
+
+    result = await db.execute(query)
+    users = result.scalars().all()
+
+    # Attach doctor_id dynamically
+    for user in users:
+        if user.receptionist_profile:
+            user.doctor_id = user.receptionist_profile.doctor_id
+        else:
+            user.doctor_id = None
+
+    return users
 
 @receptionist_router.get("/{user_id}", response_model=schemas.UserOut)
 async def get_receptionist(
@@ -259,25 +300,80 @@ async def get_receptionist(
 async def update_receptionist(
     user_id: int,
     user_update: schemas.UserUpdate,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
+    current_user: models.User = Depends(
+        dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])
+    ),
     db: AsyncSession = Depends(database.get_db)
 ):
-    query = select(models.User).where(models.User.id == user_id, models.User.role == models.UserRole.RECEPTIONIST)
+    # 1️⃣ Fetch receptionist user
+    query = select(models.User).where(
+        models.User.id == user_id,
+        models.User.role == models.UserRole.RECEPTIONIST
+    )
+
     if current_user.role == models.UserRole.HOSPITAL:
-        query = query.where(models.User.organization_id == current_user.organization_id)
-    
+        query = query.where(
+            models.User.organization_id == current_user.organization_id
+        )
+
     result = await db.execute(query)
     user = result.scalars().first()
-    if not user: raise HTTPException(status_code=404, detail="Receptionist not found")
-    
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Receptionist not found")
+
     update_data = user_update.model_dump(exclude_unset=True)
+
+    # 2️⃣ Handle password update
     if "password" in update_data:
-        update_data["hashed_password"] = auth.get_password_hash(update_data.pop("password"))
+        update_data["hashed_password"] = auth.get_password_hash(
+            update_data.pop("password")
+        )
+
+    # 3️⃣ Handle doctor assignment separately
+    doctor_id = update_data.pop("doctor_id", None)
+
+    if doctor_id is not None:
+        # Validate doctor exists & belongs to same org
+        doc_query = select(models.User).where(
+            models.User.id == doctor_id,
+            models.User.role == models.UserRole.DOCTOR
+        )
+
+        if current_user.role == models.UserRole.HOSPITAL:
+            doc_query = doc_query.where(
+                models.User.organization_id == current_user.organization_id
+            )
+
+        doc_res = await db.execute(doc_query)
+        doctor = doc_res.scalars().first()
+
+        if not doctor:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid doctor_id for this organization"
+            )
+
+        # Update receptionist profile
+        rec_res = await db.execute(
+            select(models.Receptionist).where(
+                models.Receptionist.id == user.id
+            )
+        )
+        receptionist_profile = rec_res.scalars().first()
+
+        if receptionist_profile:
+            receptionist_profile.doctor_id = doctor_id
+
+    # 4️⃣ Update normal user fields
     for key, value in update_data.items():
         setattr(user, key, value)
+
     await db.commit()
     await db.refresh(user)
+
     return user
+
 
 @receptionist_router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_receptionist(

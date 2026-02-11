@@ -67,28 +67,44 @@ This document categorizes all API endpoints into **Public** (No Auth required) a
 ## 👥 3. Patient Management (Authorized)
 *Requires: Authorization: Bearer <token>*
 
+## 👥 3. Patient Management (Authorized)
+*Requires: Authorization: Bearer <token>*
+
 ### [POST] `/patients/`
 - **Status**: 🔐 Authorized
+- **Description**: Register a new patient.
+- **Request Body**:
+  ```json
+  {
+    "full_name": "John Doe",
+    "date_of_birth": "1990-05-15T00:00:00",
+    "contact_number": "9876543210",
+    "email": "john.doe@example.com",
+    "organization_id": 1  // Optional if user is Org Admin
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "full_name": "John Doe",
+    "date_of_birth": "1990-05-15T00:00:00",
+    "contact_number": "9876543210",
+    "email": "john.doe@example.com",
+    "id": 15,
+    "organization_id": 1,
+    "doctor_id": null,
+    "created_at": "2026-02-11T10:00:00.000000"
+  }
+  ```
 
 ### [GET] `/patients`
 - **Status**: 🔐 Authorized
+- **Description**: Get list of patients (Doctors see assigned/all, Receptionists see created/all).
+- **Response**: Array of Patient objects (see above).
 
 ### [GET/PUT/DELETE] `/patients/{patient_id}`
 - **Status**: 🔐 Authorized
-
----
-
-## 🎙️ 4. Session Management (Authorized)
-*Requires: Authorization: Bearer <token>*
-
-### [POST] `/sessions/`
-- **Status**: 🔐 Authorized
-
-### [GET] `/sessions`
-- **Status**: 🔐 Authorized
-
-### [GET/PUT/DELETE] `/sessions/{session_id}`
-- **Status**: 🔐 Authorized
+- **Description**: Manage specific patient details.
 
 ---
 
@@ -96,21 +112,85 @@ This document categorizes all API endpoints into **Public** (No Auth required) a
 
 ### [POST] `/appointments/availability`
 - **Status**: 🔐 Authorized (Doctors/Receptionists)
-- **Description**: Create a new time slot.
+- **Description**: Create a **single** availability slot.
+- **Request Body**:
+  ```json
+  {
+    "start_time": "2026-02-12T09:00:00",
+    "end_time": "2026-02-12T09:15:00",
+    "doctor_id": 5,
+    "organization_id": 1 // Optional
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "start_time": "2026-02-12T09:00:00",
+    "end_time": "2026-02-12T09:15:00",
+    "id": 101,
+    "doctor_id": 5,
+    "organization_id": 1,
+    "is_booked": false
+  }
+  ```
+
+### [POST] `/appointments/availability/batch` **(NEW)**
+- **Status**: � Authorized
+- **Description**: Create **multiple** slots at once (e.g., 9 AM to 5 PM in 15-min intervals).
+- **Request Body**:
+  ```json
+  {
+    "doctor_id": 5,
+    "organization_id": 1, // Optional
+    "start_time": "2026-02-12T09:00:00",
+    "end_time": "2026-02-12T17:00:00",
+    "duration_minutes": 15
+  }
+  ```
+- **Response**: Array of created Availability objects.
 
 ### [GET] `/appointments/availability`
 - **Status**: 🔓 Public
-- **Description**: Allows patients to view available slots without logging in.
+- **Description**: Fetch available slots. Now supports date filtering.
+- **Query Parameters**:
+    - `doctor_id` (int, optional)
+    - `organization_id` (int, optional)
+    - `start_date` (datetime, optional) - *e.g., 2026-02-12T00:00:00*
+    - `end_date` (datetime, optional) - *e.g., 2026-02-12T23:59:59*
+- **Response**: Array of Availability objects.
 
 ### [POST] `/appointments/book`
 - **Status**: 🔐 Authorized
-- **Description**: Confirm an appointment booking.
-
-### [DELETE] `/appointments/availability/{slot_id}`
-- **Status**: 🔐 Authorized
+- **Description**: Book a specific slot for a patient.
+- **Request Body**:
+  ```json
+  {
+    "patient_id": 15,
+    "doctor_id": 5,
+    "start_time": "2026-02-12T09:00:00", // Must match slot
+    "end_time": "2026-02-12T09:15:00",   // Must match slot
+    "availability_id": 101,              // ID of the slot
+    "notes": "Regular checkup"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "patient_id": 15,
+    "doctor_id": 5,
+    "start_time": "2026-02-12T09:00:00",
+    "end_time": "2026-02-12T09:15:00",
+    "notes": "Regular checkup",
+    "meet_link": "https://meet.psychegraph.com/101-15",
+    "id": 501,
+    "status": "SCHEDULED",
+    "organization_id": 1
+  }
+  ```
 
 ### [GET] `/appointments`
 - **Status**: 🔐 Authorized
+- **Description**: List all appointments for the current user's role.
 
 ---
 

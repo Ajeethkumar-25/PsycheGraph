@@ -34,6 +34,8 @@ class UserOut(UserBase):
     specialization: Optional[str] = None
     license_key: Optional[str] = None
     shift_timing: Optional[str] = None
+    doctor_id: Optional[int] = None
+
     
     class Config:
         from_attributes = True
@@ -57,6 +59,7 @@ class DoctorRegister(RegistrationBase):
     specialization: str
 
 class ReceptionistRegister(RegistrationBase):
+    doctor_id: Optional[int] = None
     specialization: str
     shift_timing: str
 
@@ -143,6 +146,13 @@ class AvailabilityBase(BaseModel):
 class AvailabilityCreate(AvailabilityBase):
     doctor_id: int
     organization_id: Optional[int] = None
+
+class AvailabilityBatchCreate(BaseModel):
+    doctor_id: int
+    organization_id: Optional[int] = None
+    start_time: datetime
+    end_time: datetime
+    duration_minutes: int = 15
 
 class AvailabilityOut(AvailabilityBase):
     id: int
