@@ -91,7 +91,7 @@ class PatientCreate(PatientBase):
 
 class PatientOut(PatientBase):
     id: int
-    organization_id: int
+    organization_id: Optional[int]
     doctor_id: Optional[int]
     created_at: datetime
     

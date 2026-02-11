@@ -23,7 +23,7 @@ async def create_patient(
 
     new_patient = models.Patient(
         full_name=patient.full_name,
-        date_of_birth=patient.date_of_birth,
+        date_of_birth=patient.date_of_birth.replace(tzinfo=None) if patient.date_of_birth else None,
         contact_number=patient.contact_number,
         email=patient.email,
         organization_id=org_id,
