@@ -49,8 +49,20 @@ class User(Base):
     sessions_created = relationship("Session", back_populates="created_by", foreign_keys="[Session.created_by_id]")
 
     # One-to-One relationships
-    doctor_profile = relationship("Doctor", back_populates="user", uselist=False)
-    receptionist_profile = relationship("Receptionist", back_populates="user", uselist=False, foreign_keys="[Receptionist.id]")
+    doctor_profile = relationship(
+    "Doctor",
+    back_populates="user",
+    uselist=False,
+    cascade="all, delete-orphan"
+    )
+
+    receptionist_profile = relationship(
+    "Receptionist",
+    back_populates="user",
+    uselist=False,
+    cascade="all, delete-orphan"
+    )
+
     assigned_receptionists = relationship(
     "Receptionist",
     foreign_keys="[Receptionist.doctor_id]",
@@ -60,25 +72,38 @@ class User(Base):
 class Doctor(Base):
     __tablename__ = "doctors"
 
-    id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    id = Column(Integer, primary_key=True)  # Independent PK
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False
+    )
+
     specialization = Column(String)
-    license_key = Column(String, nullable=True) # Personal license
+    license_key = Column(String, nullable=True)
 
     user = relationship("User", back_populates="doctor_profile")
+
 
 class Receptionist(Base):
     __tablename__ = "receptionists"
 
-    id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    id = Column(Integer, primary_key=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False
+    )
+
     specialization = Column(String, nullable=True)
     shift_timing = Column(String)
 
-    # NEW FIELD
     doctor_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
-    user = relationship("User", back_populates="receptionist_profile", foreign_keys=[id])
+    user = relationship("User", back_populates="receptionist_profile", foreign_keys=[user_id])
     doctor = relationship("User", foreign_keys=[doctor_id])
-
 
 class Patient(Base):
     __tablename__ = "patients"
