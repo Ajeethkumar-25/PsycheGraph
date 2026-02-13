@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload, joinedload
 from typing import List, Optional
 from .. import models, schemas, dependencies, database
 from datetime import datetime, timedelta
@@ -72,8 +73,16 @@ async def create_availability(
     )
     db.add(new_slot)
     await db.commit()
-    await db.refresh(new_slot)
-    return new_slot
+    # Eager load for response
+    res = await db.execute(
+        select(models.Availability)
+        .options(
+            selectinload(models.Availability.doctor),
+            selectinload(models.Availability.appointment).selectinload(models.Appointment.patient)
+        )
+        .where(models.Availability.id == new_slot.id)
+    )
+    return res.scalars().first()
 
 @router.post("/availability/batch", response_model=List[schemas.AvailabilityOut])
 async def batch_create_availability(
@@ -117,8 +126,17 @@ async def batch_create_availability(
     # We can re-query or iterate refresh.
     for slot in slots:
         await db.refresh(slot)
-        
-    return slots
+    
+    # Eager load for response
+    result = await db.execute(
+        select(models.Availability)
+        .options(
+            selectinload(models.Availability.doctor),
+            selectinload(models.Availability.appointment).selectinload(models.Appointment.patient)
+        )
+        .where(models.Availability.id.in_([s.id for s in slots]))
+    )
+    return result.scalars().all()
 
 @router.get("/availability", response_model=List[schemas.AvailabilityOut])
 async def get_availability(
@@ -129,7 +147,10 @@ async def get_availability(
     only_available: bool = True,
     db: AsyncSession = Depends(database.get_db)
 ):
-    query = select(models.Availability)
+    query = select(models.Availability).options(
+        selectinload(models.Availability.doctor),
+        selectinload(models.Availability.appointment).selectinload(models.Appointment.patient)
+    )
     if doctor_id:
         query = query.where(models.Availability.doctor_id == doctor_id)
     if organization_id:
@@ -168,6 +189,7 @@ async def book_appointment(
         patient_id=booking.patient_id,
         doctor_id=slot.doctor_id,
         organization_id=slot.organization_id,
+        availability_id=slot.id,  # Link back
         start_time=slot.start_time,
         end_time=slot.end_time,
         notes=booking.notes,

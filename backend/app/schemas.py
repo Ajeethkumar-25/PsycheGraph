@@ -159,6 +159,8 @@ class AvailabilityBatchCreate(BaseModel):
 class AvailabilityOut(AvailabilityBase):
     id: int
     doctor_id: int
+    doctor_name: str
+    patient_name: str
     organization_id: int
     is_booked: bool
 

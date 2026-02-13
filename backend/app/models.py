@@ -118,6 +118,7 @@ class Appointment(Base):
     patient_id = Column(Integer, ForeignKey("patients.id"))
     doctor_id = Column(Integer, ForeignKey("users.id"))
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
+    availability_id = Column(Integer, ForeignKey("availabilities.id"), nullable=True) # Linked slot
     start_time = Column(DateTime)
     end_time = Column(DateTime)
     status = Column(String, default="SCHEDULED") # SCHEDULED, COMPLETED, CANCELLED
@@ -126,6 +127,7 @@ class Appointment(Base):
     
     patient = relationship("Patient", back_populates="appointments")
     doctor = relationship("User", back_populates="appointments_as_doctor")
+    availability = relationship("Availability", back_populates="appointment")
 
 class Availability(Base):
     __tablename__ = "availabilities"
@@ -139,6 +141,17 @@ class Availability(Base):
 
     doctor = relationship("User", backref="availability_slots")
     organization = relationship("Organization")
+    appointment = relationship("Appointment", back_populates="availability", uselist=False)
+
+    @property
+    def doctor_name(self) -> str:
+        return self.doctor.full_name if self.doctor else "Unknown"
+
+    @property
+    def patient_name(self) -> str:
+        if self.appointment and self.appointment.patient:
+            return self.appointment.patient.full_name
+        return "Available"
 
 class Session(Base):
     __tablename__ = "sessions"
