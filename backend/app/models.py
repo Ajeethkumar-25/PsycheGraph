@@ -50,60 +50,46 @@ class User(Base):
 
     # One-to-One relationships
     doctor_profile = relationship(
-    "Doctor",
-    back_populates="user",
-    uselist=False,
-    cascade="all, delete-orphan"
+        "Doctor", 
+        back_populates="user", 
+        uselist=False, 
+        cascade="all, delete-orphan"
     )
-
     receptionist_profile = relationship(
-    "Receptionist",
-    back_populates="user",
-    uselist=False,
-    cascade="all, delete-orphan"
+        "Receptionist", 
+        back_populates="user", 
+        uselist=False, 
+        cascade="all, delete-orphan",
+        foreign_keys="[Receptionist.id]"
     )
-
     assigned_receptionists = relationship(
-    "Receptionist",
-    foreign_keys="[Receptionist.doctor_id]",
-    back_populates="doctor"
-)
+        "Receptionist",
+        foreign_keys="[Receptionist.doctor_id]",
+        back_populates="doctor"
+    )
 
 class Doctor(Base):
     __tablename__ = "doctors"
 
-    id = Column(Integer, primary_key=True)  # Independent PK
-    user_id = Column(
-        Integer,
-        ForeignKey("users.id", ondelete="CASCADE"),
-        unique=True,
-        nullable=False
-    )
-
+    id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     specialization = Column(String)
-    license_key = Column(String, nullable=True)
+    license_key = Column(String, nullable=True) # Personal license
 
     user = relationship("User", back_populates="doctor_profile")
-
 
 class Receptionist(Base):
     __tablename__ = "receptionists"
 
-    id = Column(Integer, primary_key=True)
-    user_id = Column(
-        Integer,
-        ForeignKey("users.id", ondelete="CASCADE"),
-        unique=True,
-        nullable=False
-    )
-
+    id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     specialization = Column(String, nullable=True)
     shift_timing = Column(String)
 
+    # NEW FIELD
     doctor_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
-    user = relationship("User", back_populates="receptionist_profile", foreign_keys=[user_id])
+    user = relationship("User", back_populates="receptionist_profile", foreign_keys=[id])
     doctor = relationship("User", foreign_keys=[doctor_id])
+
 
 class Patient(Base):
     __tablename__ = "patients"

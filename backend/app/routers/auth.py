@@ -245,6 +245,7 @@ async def login_user(
         doctor_id=user.id if user.role == models.UserRole.DOCTOR else (user.receptionist_profile.doctor_id if user.receptionist_profile else None),
         access_token=access_token,
         refresh_token=refresh_token,
+        doctor_name=user.full_name if user.role == models.UserRole.DOCTOR else (user.receptionist_profile.doctor.full_name if user.receptionist_profile else None),
         token_type="bearer"
     )
 

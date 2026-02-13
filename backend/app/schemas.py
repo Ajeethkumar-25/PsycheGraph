@@ -91,6 +91,7 @@ class PatientBase(BaseModel):
 
 class PatientCreate(PatientBase):
     organization_id: Optional[int] = None
+    doctor_id: Optional[int] = None
 
 class PatientOut(PatientBase):
     id: int
