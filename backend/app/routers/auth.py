@@ -17,7 +17,10 @@ async def login_for_access_token(user_credentials: schemas.UserLogin, db: AsyncS
     # Eager load profiles
     result = await db.execute(
         select(models.User)
-        .options(selectinload(models.User.doctor_profile), selectinload(models.User.receptionist_profile))
+        .options(
+            selectinload(models.User.doctor_profile),
+            selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctor)
+        )
         .where(models.User.email == user_credentials.email)
     )
     user = result.scalars().first()
@@ -53,6 +56,7 @@ async def login_for_access_token(user_credentials: schemas.UserLogin, db: AsyncS
         license_key=user.doctor_profile.license_key if user.doctor_profile else user.license_key,
         shift_timing=user.receptionist_profile.shift_timing if user.receptionist_profile else user.shift_timing,
         doctor_id=user.id if user.role == models.UserRole.DOCTOR else (user.receptionist_profile.doctor_id if user.receptionist_profile else None),
+        doctor_name=user.full_name if user.role == models.UserRole.DOCTOR else (user.receptionist_profile.doctor.full_name if user.receptionist_profile else None),
         access_token=access_token,
         refresh_token=refresh_token,
         token_type="bearer"
@@ -99,7 +103,10 @@ async def refresh_access_token(token_data: schemas.TokenRefresh, db: AsyncSessio
         # Re-query with profiles for consistency in refresh
         result = await db.execute(
             select(models.User)
-            .options(selectinload(models.User.doctor_profile), selectinload(models.User.receptionist_profile))
+            .options(
+                selectinload(models.User.doctor_profile),
+                selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctor)
+            )
             .where(models.User.id == user.id)
         )
         user_refresh = result.scalars().first()
@@ -115,6 +122,7 @@ async def refresh_access_token(token_data: schemas.TokenRefresh, db: AsyncSessio
             license_key=user_refresh.doctor_profile.license_key if user_refresh.doctor_profile else user_refresh.license_key,
             shift_timing=user_refresh.receptionist_profile.shift_timing if user_refresh.receptionist_profile else user_refresh.shift_timing,
             doctor_id=user_refresh.id if user_refresh.role == models.UserRole.DOCTOR else (user_refresh.receptionist_profile.doctor_id if user_refresh.receptionist_profile else None),
+            doctor_name=user_refresh.full_name if user_refresh.role == models.UserRole.DOCTOR else (user_refresh.receptionist_profile.doctor.full_name if user_refresh.receptionist_profile else None),
             access_token=access_token,
             refresh_token=new_refresh_token,
             token_type="bearer"
@@ -204,7 +212,10 @@ async def login_user(
     # Eager load profiles
     result = await db.execute(
         select(models.User)
-        .options(selectinload(models.User.doctor_profile), selectinload(models.User.receptionist_profile))
+        .options(
+            selectinload(models.User.doctor_profile),
+            selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctor)
+        )
         .where(models.User.email == user_credentials.email)
     )
     user = result.scalars().first()
