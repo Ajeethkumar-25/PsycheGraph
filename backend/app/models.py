@@ -49,18 +49,29 @@ class User(Base):
     sessions_created = relationship("Session", back_populates="created_by", foreign_keys="[Session.created_by_id]")
 
     # One-to-One relationships
-    doctor_profile = relationship("Doctor", back_populates="user", uselist=False)
-    receptionist_profile = relationship("Receptionist", back_populates="user", uselist=False, foreign_keys="[Receptionist.id]")
+    doctor_profile = relationship(
+        "Doctor", 
+        back_populates="user", 
+        uselist=False, 
+        cascade="all, delete-orphan"
+    )
+    receptionist_profile = relationship(
+        "Receptionist", 
+        back_populates="user", 
+        uselist=False, 
+        cascade="all, delete-orphan",
+        foreign_keys="[Receptionist.id]"
+    )
     assigned_receptionists = relationship(
-    "Receptionist",
-    foreign_keys="[Receptionist.doctor_id]",
-    back_populates="doctor"
-)
+        "Receptionist",
+        foreign_keys="[Receptionist.doctor_id]",
+        back_populates="doctor"
+    )
 
 class Doctor(Base):
     __tablename__ = "doctors"
 
-    id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     specialization = Column(String)
     license_key = Column(String, nullable=True) # Personal license
 
@@ -69,7 +80,7 @@ class Doctor(Base):
 class Receptionist(Base):
     __tablename__ = "receptionists"
 
-    id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     specialization = Column(String, nullable=True)
     shift_timing = Column(String)
 

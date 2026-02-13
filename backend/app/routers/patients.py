@@ -27,6 +27,7 @@ async def create_patient(
         contact_number=patient.contact_number,
         email=patient.email,
         organization_id=org_id,
+        doctor_id=patient.doctor_id,
         created_by_id=current_user.id
     )
     db.add(new_patient)
@@ -90,7 +91,7 @@ async def get_patient(
 async def update_patient(
     patient_id: int,
     patient_update: schemas.PatientUpdate,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.RECEPTIONIST, models.UserRole.HOSPITAL, models.UserRole.SUPER_ADMIN])),
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.RECEPTIONIST, models.UserRole.HOSPITAL])),
     db: AsyncSession = Depends(database.get_db)
 ):
     query = select(models.Patient).where(models.Patient.id == patient_id)
@@ -120,7 +121,7 @@ async def update_patient(
 @router.delete("/{patient_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_patient(
     patient_id: int,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.HOSPITAL, models.UserRole.SUPER_ADMIN])),
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.HOSPITAL, models.UserRole.RECEPTIONIST])),
     db: AsyncSession = Depends(database.get_db)
 ):
     query = select(models.Patient).where(models.Patient.id == patient_id)
@@ -129,7 +130,7 @@ async def delete_patient(
     elif current_user.role == models.UserRole.HOSPITAL:
          query = query.where(models.Patient.organization_id == current_user.organization_id)
     else:
-         raise HTTPException(status_code=403, detail="Only Admins can delete patients")
+         raise HTTPException(status_code=403, detail="Only Hospital Admins and Receptionists can delete patients")
          
     result = await db.execute(query)
     patient = result.scalars().first()
