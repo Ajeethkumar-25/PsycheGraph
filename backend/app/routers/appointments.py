@@ -12,17 +12,14 @@ router = APIRouter(prefix="/appointments", tags=["Appointments"])
 @router.post("/availability", response_model=schemas.AvailabilityOut)
 async def create_availability(
     slot: schemas.AvailabilityCreate,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.DOCTOR, models.UserRole.RECEPTIONIST, models.UserRole.HOSPITAL])),
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.HOSPITAL])),
     db: AsyncSession = Depends(database.get_db)
 ):
     # Logic: Doctors create for themselves, Receptionists/Admins can create for any doctor in their org
     target_doctor_id = slot.doctor_id
     org_id = slot.organization_id or current_user.organization_id
 
-    if current_user.role == models.UserRole.DOCTOR:
-        if target_doctor_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Doctors can only manage their own availability")
-    elif current_user.role == models.UserRole.RECEPTIONIST:
+    if current_user.role == models.UserRole.RECEPTIONIST:
 
         # Load receptionist profile
         rec_res = await db.execute(
@@ -69,8 +66,8 @@ async def create_availability(
     new_slot = models.Availability(
         doctor_id=target_doctor_id,
         organization_id=org_id,
-        start_time=slot.start_time,
-        end_time=slot.end_time,
+        start_time=slot.start_time.replace(tzinfo=None) if slot.start_time else None,
+        end_time=slot.end_time.replace(tzinfo=None) if slot.end_time else None,
         is_booked=False
     )
     db.add(new_slot)
@@ -98,8 +95,10 @@ async def batch_create_availability(
 
     # Generate slots
     slots = []
-    current_time = batch.start_time
-    while current_time + timedelta(minutes=batch.duration_minutes) <= batch.end_time:
+    current_time = batch.start_time.replace(tzinfo=None) if batch.start_time else None
+    batch_end_time = batch.end_time.replace(tzinfo=None) if batch.end_time else None
+
+    while current_time and batch_end_time and current_time + timedelta(minutes=batch.duration_minutes) <= batch_end_time:
         slot_end = current_time + timedelta(minutes=batch.duration_minutes)
         new_slot = models.Availability(
             doctor_id=target_doctor_id,
@@ -136,9 +135,9 @@ async def get_availability(
     if organization_id:
         query = query.where(models.Availability.organization_id == organization_id)
     if start_date:
-        query = query.where(models.Availability.start_time >= start_date)
+        query = query.where(models.Availability.start_time >= start_date.replace(tzinfo=None))
     if end_date:
-        query = query.where(models.Availability.start_time <= end_date)
+        query = query.where(models.Availability.start_time <= end_date.replace(tzinfo=None))
     if only_available:
         query = query.where(models.Availability.is_booked == False)
     
@@ -188,7 +187,7 @@ async def book_appointment(
 @router.delete("/availability/{slot_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_availability_slot(
     slot_id: int,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.DOCTOR, models.UserRole.RECEPTIONIST, models.UserRole.HOSPITAL])),
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.RECEPTIONIST, models.UserRole.HOSPITAL])),
     db: AsyncSession = Depends(database.get_db)
 ):
     slot_res = await db.execute(select(models.Availability).where(models.Availability.id == slot_id))
@@ -198,8 +197,6 @@ async def delete_availability_slot(
         raise HTTPException(status_code=404, detail="Slot not found")
 
     # Check permission
-    if current_user.role == models.UserRole.DOCTOR and slot.doctor_id != current_user.id:
-         raise HTTPException(status_code=403, detail="Not authorized")
     if current_user.role in [models.UserRole.RECEPTIONIST, models.UserRole.HOSPITAL] and slot.organization_id != current_user.organization_id:
          raise HTTPException(status_code=403, detail="Not authorized")
 
