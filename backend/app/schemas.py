@@ -35,6 +35,7 @@ class UserOut(UserBase):
     license_key: Optional[str] = None
     shift_timing: Optional[str] = None
     doctor_id: Optional[int] = None
+    doctor_name: Optional[str] = None
 
     
     class Config:
