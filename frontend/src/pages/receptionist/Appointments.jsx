@@ -256,73 +256,111 @@ export default function ReceptionistAppointments() {
                 <pre>{JSON.stringify(currentUser, null, 2)}</pre>
             </div> */}
 
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                    <h2 className="text-2xl font-bold text-slate-900">Appointments</h2>
-                    <p className="text-slate-500">Schedule and manage clinic visits</p>
-                </div>
-                <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="flex items-center justify-center gap-2 bg-primary-600 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-primary-700 transition shadow-md w-full sm:w-auto"
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
                 >
-                    <Plus size={18} />
+                    <p className="text-sm font-semibold text-indigo-600 mb-1">Scheduling</p>
+                    <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Appointments</h2>
+                    <p className="text-slate-500 mt-1">Schedule and manage clinic visits</p>
+                </motion.div>
+                <motion.button
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => setIsModalOpen(true)}
+                    className="flex items-center justify-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/25 w-full sm:w-auto"
+                >
+                    <Plus size={16} />
                     <span>Book Appointment</span>
-                </button>
+                </motion.button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* List */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden lg:col-span-2">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead className="bg-slate-50 text-slate-500 text-sm font-semibold border-b border-slate-100">
-                                <tr>
-                                    <th className="px-6 py-4 whitespace-nowrap">Time</th>
-                                    <th className="px-6 py-4 whitespace-nowrap">Patient</th>
-                                    <th className="px-6 py-4 whitespace-nowrap">Doctor</th>
-                                    <th className="px-6 py-4 whitespace-nowrap">Status</th>
-                                    <th className="px-6 py-4 whitespace-nowrap text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {appointments.map((app) => (
-                                    <tr key={app.id} className="hover:bg-slate-50 transition">
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-2">
-                                                <CalendarIcon size={16} className="text-slate-400" />
-                                                <span className="text-sm font-medium text-slate-900">
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="bg-white rounded-2xl border border-slate-200 overflow-hidden"
+            >
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead className="bg-slate-50/80">
+                            <tr className="border-b border-slate-100">
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Date & Time</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Patient</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Doctor</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                            {appointments.map((app, index) => (
+                                <motion.tr
+                                    key={app.id}
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ delay: index * 0.03 }}
+                                    className="hover:bg-slate-50/50 transition-colors group"
+                                >
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="h-10 w-10 bg-indigo-50 rounded-xl flex items-center justify-center shrink-0">
+                                                <CalendarIcon size={16} className="text-indigo-600" />
+                                            </div>
+                                            <div>
+                                                <span className="text-sm font-semibold text-slate-900">
                                                     {new Date(app.start_time).toLocaleDateString()}
                                                 </span>
-                                                <Clock size={16} className="text-slate-400 ml-2" />
-                                                <span className="text-sm font-medium text-slate-900">
+                                                <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+                                                    <Clock size={10} />
                                                     {new Date(app.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                </span>
+                                                </p>
                                             </div>
-                                        </td>
-                                        <td className="px-6 py-4 font-medium text-slate-900">{app.patient_name}</td>
-                                        <td className="px-6 py-4 text-slate-600">Dr. {app.doctor_name}</td>
-                                        <td className="px-6 py-4">
-                                            <span className={cn(
-                                                "px-2 py-1 text-xs font-bold rounded uppercase",
-                                                app.status === 'SCHEDULED' ? 'bg-blue-100 text-blue-700' :
-                                                    app.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
-                                            )}>
-                                                {app.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <button onClick={() => handleCancel(app.id)} className="text-slate-400 hover:text-red-500 p-1 transition-colors">
-                                                <Trash2 size={18} />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                    {appointments.length === 0 && !loading && <div className="p-8 text-center text-slate-500">No appointments found</div>}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <span className="text-sm font-semibold text-slate-900">{app.patient_name}</span>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <span className="text-sm text-slate-600 flex items-center gap-1.5">
+                                            <Stethoscope size={12} className="text-slate-400" />
+                                            Dr. {app.doctor_name}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <span className={cn(
+                                            "px-2.5 py-1 text-xs font-semibold rounded-lg",
+                                            app.status === 'SCHEDULED' ? 'bg-blue-50 text-blue-600' :
+                                                app.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'
+                                        )}>
+                                            {app.status}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        <button
+                                            onClick={() => handleCancel(app.id)}
+                                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </td>
+                                </motion.tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
-            </div>
+                {appointments.length === 0 && !loading && (
+                    <div className="flex flex-col items-center justify-center py-16 text-center">
+                        <div className="p-4 rounded-full bg-slate-50 mb-4">
+                            <CalendarIcon size={28} className="text-slate-300" />
+                        </div>
+                        <p className="text-sm font-semibold text-slate-400">No appointments found</p>
+                        <p className="text-xs text-slate-400 mt-1">Book a new appointment to get started</p>
+                    </div>
+                )}
+            </motion.div>
 
             {/* Modal Wizard */}
             <AnimatePresence>
@@ -621,7 +659,7 @@ export default function ReceptionistAppointments() {
                                     <button
                                         onClick={handleNextStep}
                                         disabled={!formData.patient_id || !formData.doctor_id}
-                                        className="w-full py-4 bg-primary-600 text-white rounded-xl font-bold hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-primary-500/30 flex items-center justify-center gap-2 text-lg"
+                                        className="w-full py-3.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2"
                                     >
                                         <span>Next Step</span>
                                         <ChevronRight size={20} />
@@ -635,7 +673,7 @@ export default function ReceptionistAppointments() {
                                         <button
                                             onClick={handleCreateAppointment}
                                             disabled={isSubmitting || !formData.date || !formData.time}
-                                            className="flex-1 py-3.5 bg-primary-800 text-white rounded-xl font-bold hover:bg-primary-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-primary-900/20 flex items-center justify-center gap-2"
+                                            className="flex-1 py-3.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2"
                                         >
                                             {isSubmitting ? (
                                                 <>

@@ -1,19 +1,18 @@
 import { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
     Users,
     Calendar,
     Clock,
     UserPlus,
-    Activity,
+    Loader2,
     ArrowRight,
     Search,
-    ChevronRight,
-    Sparkles,
     CalendarCheck,
-    Contact2,
-    Stethoscope
+    Stethoscope,
+    TrendingUp,
+    ArrowUpRight
 } from 'lucide-react';
 import { fetchPatients } from '../../store/slices/PatientSlice';
 import { fetchAppointments } from '../../store/slices/AppointmentSlice';
@@ -35,176 +34,171 @@ export default function ReceptionistDashboard() {
 
     const stats = [
         {
-            label: 'Today\'s Appointments',
+            label: "Today's Appointments",
             value: todaysAppointments.length,
             icon: Calendar,
-            gradient: 'from-blue-500 to-cyan-500',
-            change: 'Check clinical schedule'
+            color: 'bg-indigo-50 text-indigo-600',
+            iconBg: 'bg-indigo-100',
+            sub: 'Scheduled for today'
         },
         {
             label: 'Total Patients',
             value: patients.length,
             icon: Users,
-            gradient: 'from-emerald-500 to-teal-500',
-            change: '+3 new this week'
+            color: 'bg-emerald-50 text-emerald-600',
+            iconBg: 'bg-emerald-100',
+            sub: 'Registered in system'
         },
         {
-            label: 'Incoming Check-ins',
+            label: 'Upcoming Check-ins',
             value: '4',
             icon: Clock,
-            gradient: 'from-orange-500 to-amber-500',
-            change: 'In the next hour'
+            color: 'bg-amber-50 text-amber-600',
+            iconBg: 'bg-amber-100',
+            sub: 'In the next hour'
         },
     ];
 
     if (patientsLoading || appointmentsLoading) {
         return (
             <div className="flex h-64 items-center justify-center">
-                <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                >
-                    <Activity className="text-primary-500" size={40} />
-                </motion.div>
+                <Loader2 className="animate-spin text-indigo-500" size={36} />
             </div>
         );
     }
 
-    const containerVariants = {
-        hidden: { opacity: 0 },
-        visible: {
-            opacity: 1,
-            transition: { staggerChildren: 0.1 }
-        }
-    };
-
-    const itemVariants = {
-        hidden: { opacity: 0, y: 20 },
-        visible: { opacity: 1, y: 0 }
-    };
-
     return (
-        <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-            className="space-y-8 pb-10"
-        >
+        <div className="space-y-8 pb-10">
             {/* Header */}
-            <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col md:flex-row md:items-end justify-between gap-4"
+            >
                 <div>
-                    <h1 className="text-4xl font-black text-slate-900 tracking-tight mb-2">
-                        Front Desk <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-600 to-purple-600">Command Center</span>
+                    <p className="text-sm font-semibold text-indigo-600 mb-1">Receptionist Portal</p>
+                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+                        Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 17 ? 'Afternoon' : 'Evening'} 👋
                     </h1>
-                    <p className="text-slate-500 font-medium flex items-center gap-2">
-                        <Contact2 size={18} className="text-primary-500" />
-                        Managing patient flow and scheduling for today.
+                    <p className="text-slate-500 mt-1">
+                        Here's what's happening at your front desk today.
                     </p>
                 </div>
                 <div className="flex gap-3">
                     <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={() => window.location.href = '/receptionist/patients'}
-                        className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-slate-100 text-slate-700 rounded-2xl shadow-sm hover:bg-slate-50 transition-all font-bold"
+                        className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 transition-all font-semibold text-sm shadow-sm"
                     >
-                        <UserPlus size={18} className="text-primary-600" />
-                        REGISTER PATIENT
+                        <UserPlus size={16} className="text-indigo-500" />
+                        Register Patient
                     </motion.button>
                     <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={() => window.location.href = '/receptionist/appointments'}
-                        className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-2xl shadow-xl shadow-primary-500/30 font-bold"
+                        className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-500/25 font-semibold text-sm hover:bg-indigo-700 transition-all"
                     >
-                        <Calendar size={18} />
-                        BOOK APPOINTMENT
+                        <Calendar size={16} />
+                        Book Appointment
                     </motion.button>
                 </div>
             </motion.div>
 
             {/* Stats Grid */}
-            <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                 {stats.map((stat, index) => {
                     const Icon = stat.icon;
                     return (
                         <motion.div
                             key={stat.label}
-                            whileHover={{ y: -5, scale: 1.02 }}
-                            className="relative group"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: index * 0.1 }}
+                            className="group bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-lg hover:border-slate-300 transition-all duration-300 cursor-default"
                         >
-                            <div className="backdrop-blur-xl bg-white/80 p-6 rounded-3xl shadow-xl border border-white/50 overflow-hidden">
-                                <div className={`absolute inset-0 bg-gradient-to-br ${stat.gradient} opacity-0 group-hover:opacity-5 transition-opacity`} />
-                                <div className="flex items-start justify-between mb-4">
-                                    <div className={`p-3 rounded-2xl bg-gradient-to-br ${stat.gradient} shadow-lg shadow-primary-500/20`}>
-                                        <Icon size={24} className="text-white" />
-                                    </div>
-                                    <div className="flex items-center gap-1 text-[10px] font-black text-primary-600 uppercase tracking-wider bg-primary-50 px-2 py-1 rounded-full border border-primary-100">
-                                        {stat.change}
-                                    </div>
+                            <div className="flex items-center justify-between mb-4">
+                                <div className={`p-2.5 rounded-xl ${stat.iconBg}`}>
+                                    <Icon size={20} className={stat.color.split(' ')[1]} />
                                 </div>
-                                <p className="text-sm font-bold text-slate-400 mb-1">{stat.label}</p>
-                                <p className="text-3xl font-black text-slate-900">{stat.value}</p>
+                                <div className="flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg">
+                                    <TrendingUp size={12} />
+                                    <span>Active</span>
+                                </div>
                             </div>
+                            <p className="text-3xl font-bold text-slate-900 mb-1">{stat.value}</p>
+                            <p className="text-sm font-medium text-slate-500">{stat.label}</p>
+                            <p className="text-xs text-slate-400 mt-1">{stat.sub}</p>
                         </motion.div>
                     );
                 })}
-            </motion.div>
+            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Schedule Preview */}
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                {/* Schedule Preview - takes 3 columns */}
                 <motion.div
-                    variants={itemVariants}
-                    className="backdrop-blur-xl bg-white/80 rounded-[2.5rem] shadow-xl border border-white/50 overflow-hidden flex flex-col"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="lg:col-span-3 bg-white rounded-2xl border border-slate-200 overflow-hidden flex flex-col"
                 >
-                    <div className="p-8 border-b border-slate-100 flex items-center justify-between">
-                        <h3 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                            <CalendarCheck size={24} className="text-primary-600" />
-                            Active Timeline
-                        </h3>
-                        <a href="/receptionist/appointments" className="text-sm font-black text-primary-600 hover:underline">VIEW FULL CALENDAR</a>
+                    <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-indigo-50">
+                                <CalendarCheck size={18} className="text-indigo-600" />
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-900">Today's Schedule</h3>
+                        </div>
+                        <a href="/receptionist/appointments" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 transition-colors">
+                            View all
+                            <ArrowUpRight size={14} />
+                        </a>
                     </div>
 
-                    <div className="p-4 flex-1 overflow-y-auto custom-scrollbar max-h-[400px]">
+                    <div className="flex-1 overflow-y-auto max-h-[420px]">
                         {todaysAppointments.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-20 text-center opacity-50">
-                                <Calendar size={48} className="mb-4 text-slate-300" />
-                                <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No Sessions Found</p>
+                            <div className="flex flex-col items-center justify-center py-20 text-center">
+                                <div className="p-4 rounded-full bg-slate-50 mb-4">
+                                    <Calendar size={32} className="text-slate-300" />
+                                </div>
+                                <p className="text-sm font-semibold text-slate-400">No appointments for today</p>
+                                <p className="text-xs text-slate-400 mt-1">New bookings will appear here</p>
                             </div>
                         ) : (
-                            <div className="space-y-3">
+                            <div className="divide-y divide-slate-50">
                                 {todaysAppointments.map((app, index) => (
                                     <motion.div
                                         key={app.id}
-                                        initial={{ opacity: 0, x: -20 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        transition={{ delay: 0.4 + index * 0.1 }}
-                                        whileHover={{ x: 5, backgroundColor: 'rgba(248, 250, 252, 0.8)' }}
-                                        className="flex items-center justify-between p-4 rounded-2xl border border-slate-100 hover:border-primary-100 transition-all cursor-pointer group"
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        transition={{ delay: 0.4 + index * 0.05 }}
+                                        className="flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition-colors cursor-pointer group"
                                     >
                                         <div className="flex items-center gap-4">
-                                            <div className="h-12 w-12 bg-white rounded-xl shadow-sm border border-slate-100 flex flex-col items-center justify-center">
-                                                <span className="text-primary-600 font-black text-sm">
-                                                    {new Date(app.start_time).getHours()}:{new Date(app.start_time).getMinutes().toString().padStart(2, '0')}
+                                            <div className="h-11 w-11 bg-indigo-50 rounded-xl flex items-center justify-center shrink-0">
+                                                <span className="text-indigo-600 font-bold text-sm">
+                                                    {new Date(app.start_time).getHours().toString().padStart(2, '0')}:{new Date(app.start_time).getMinutes().toString().padStart(2, '0')}
                                                 </span>
                                             </div>
                                             <div>
-                                                <p className="font-black text-slate-900 uppercase tracking-tight group-hover:text-primary-600 transition-colors">
+                                                <p className="font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">
                                                     {app.patient_name || 'Patient TBD'}
                                                 </p>
-                                                <p className="text-[11px] font-bold text-slate-400 uppercase flex items-center gap-1">
-                                                    <Stethoscope size={10} className="text-primary-400" />
-                                                    CONSULTATION WITH DR. {app.doctor_name?.toUpperCase() || 'ASSIGNED'}
+                                                <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+                                                    <Stethoscope size={10} />
+                                                    Dr. {app.doctor_name || 'Assigned'}
                                                 </p>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-3">
-                                            <span className="px-3 py-1 bg-primary-50 text-primary-600 text-[10px] font-black rounded-full uppercase border border-primary-100">
+                                            <span className={`px-2.5 py-1 text-xs font-semibold rounded-lg ${app.status === 'SCHEDULED' ? 'bg-blue-50 text-blue-600' :
+                                                    app.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-600' :
+                                                        'bg-red-50 text-red-600'
+                                                }`}>
                                                 {app.status}
                                             </span>
-                                            <div className="p-2 rounded-lg text-slate-300 group-hover:text-primary-600 transition-colors">
-                                                <ArrowRight size={18} />
-                                            </div>
+                                            <ArrowRight size={16} className="text-slate-300 group-hover:text-indigo-500 transition-colors" />
                                         </div>
                                     </motion.div>
                                 ))}
@@ -213,34 +207,46 @@ export default function ReceptionistDashboard() {
                     </div>
                 </motion.div>
 
-                {/* Quick Registration / Search */}
+                {/* Quick Search - takes 2 columns */}
                 <motion.div
-                    variants={itemVariants}
-                    className="backdrop-blur-xl bg-white/80 rounded-[2.5rem] shadow-xl border border-white/50 overflow-hidden flex flex-col items-center justify-center text-center p-12 relative"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4 }}
+                    className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 overflow-hidden flex flex-col"
                 >
-                    <div className="absolute inset-0 bg-gradient-to-br from-primary-50/50 to-indigo-50/50 -z-10" />
-                    <motion.div
-                        animate={{ y: [0, -10, 0] }}
-                        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                        className="p-8 bg-white rounded-full shadow-2xl shadow-primary-500/10 mb-8 border-2 border-primary-50"
-                    >
-                        <Search size={60} className="text-primary-600" />
-                    </motion.div>
-                    <h3 className="text-2xl font-black text-slate-900 mb-2">Patient Search</h3>
-                    <p className="text-slate-500 font-medium mb-8 max-w-xs">Instantly locate patient files or check-in upcoming appointments.</p>
-                    <div className="w-full relative px-4 text-left">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-4">Search Registry</label>
-                        <div className="relative">
+                    <div className="px-6 py-5 border-b border-slate-100">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-indigo-50">
+                                <Search size={18} className="text-indigo-600" />
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-900">Quick Search</h3>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+                        <div className="p-6 bg-gradient-to-br from-indigo-50 to-slate-50 rounded-2xl mb-6">
+                            <Search size={40} className="text-indigo-400" />
+                        </div>
+                        <h4 className="text-lg font-bold text-slate-900 mb-1">Find a Patient</h4>
+                        <p className="text-sm text-slate-500 mb-6 max-w-[240px]">Search by name, ID, or phone to quickly find patients.</p>
+                        <div className="w-full relative">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                             <input
                                 type="text"
-                                placeholder="Name, ID or Phone number..."
-                                className="w-full py-4 pl-12 pr-4 bg-white border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-all font-bold placeholder:text-slate-400 shadow-sm"
+                                placeholder="Search patients..."
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-11 pr-4 text-slate-900 font-medium placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                             />
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
                         </div>
+                        <button
+                            onClick={() => window.location.href = '/receptionist/patients'}
+                            className="mt-4 text-sm font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 transition-colors"
+                        >
+                            Go to Patient Registry
+                            <ArrowUpRight size={14} />
+                        </button>
                     </div>
                 </motion.div>
             </div>
-        </motion.div>
+        </div>
     );
 }

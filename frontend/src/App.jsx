@@ -1,6 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import Login from './commenlogin/Login';
+import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import Patients from './pages/Patients';
 import Sessions from './pages/Sessions';
@@ -9,7 +9,6 @@ import SuperAdminDashboard from './pages/superadmin/Dashboard';
 import Organizations from './pages/superadmin/Organizations';
 import SuperAdminUsers from './pages/superadmin/Users';
 import HospitalDetails from './pages/superadmin/HospitalDetails';
-import Register from './pages/Register';
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminUsers from './pages/admin/Users';
 import ReceptionistDashboard from './pages/receptionist/Dashboard';
@@ -29,22 +28,14 @@ function App() {
             <Routes>
                 <Route path="/admin" element={
                     !token ? (
-                        <Login
-                            showRegister={false}
-                            allowedRoles={['SUPER_ADMIN']}
-                            portalTitle="Super Admin Governance Portal"
-                        />
+                        <Auth />
                     ) : (
                         (user?.role || user?.user?.role)?.toUpperCase() === 'SUPER_ADMIN' ? <Navigate to="/superadmin" /> : <Navigate to="/" />
                     )
                 } />
                 <Route path="/" element={
                     !token ? (
-                        <Login
-                            allowedRoles={['ADMIN', 'HOSPITAL', 'DOCTOR', 'RECEPTIONIST']}
-                            portalTitle="Clinical Operations Portal"
-                            isHospitalPortal={true}
-                        />
+                        <Auth />
                     ) : (
                         (user?.role || user?.user?.role)?.toUpperCase() === 'SUPER_ADMIN' ? <Navigate to="/superadmin" /> : (
                             (user?.role || user?.user?.role)?.toUpperCase() === 'ADMIN' || (user?.role || user?.user?.role)?.toUpperCase() === 'HOSPITAL' ? <Navigate to="/hospital-admin" /> :
@@ -54,7 +45,7 @@ function App() {
                         )
                     )
                 } />
-                <Route path="/register" element={<Register />} />
+                <Route path="/register" element={<Auth />} />
                 <Route element={token ? <Layout /> : <Navigate to="/" />}>
                     {/* Common Routes - protected by backend mainly but UI should also guard */}
                     <Route path="/patients" element={<Patients />} />
@@ -75,7 +66,7 @@ function App() {
                         (user?.role || user?.user?.role)?.toUpperCase() === 'SUPER_ADMIN' ? <HospitalDetails /> : <Navigate to="/" />
                     } />
                     <Route path="/superadmin/register" element={
-                        (user?.role || user?.user?.role)?.toUpperCase() === 'SUPER_ADMIN' ? <Register /> : <Navigate to="/" />
+                        (user?.role || user?.user?.role)?.toUpperCase() === 'SUPER_ADMIN' ? <Auth /> : <Navigate to="/" />
                     } />
 
                     {/* Admin Routes */}

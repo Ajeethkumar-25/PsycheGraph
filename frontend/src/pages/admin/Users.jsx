@@ -191,56 +191,78 @@ export default function AdminUsers() {
                 )}
             </AnimatePresence>
 
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h2 className="text-2xl font-bold text-slate-900">User Management</h2>
-                    <p className="text-slate-500">Manage doctors and receptionists</p>
-                </div>
-                <button
-                    onClick={() => handleOpenModal()}
-                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition shadow-lg shadow-indigo-200 w-full md:w-auto font-bold"
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
                 >
-                    <Plus size={20} />
+                    <p className="text-sm font-semibold text-blue-600 mb-1">Staff Management</p>
+                    <h2 className="text-3xl font-bold text-slate-900 tracking-tight">User Management</h2>
+                    <p className="text-slate-500 mt-1">Manage doctors and receptionists</p>
+                </motion.div>
+                <motion.button
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => handleOpenModal()}
+                    className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/25 w-full md:w-auto font-semibold text-sm"
+                >
+                    <Plus size={16} />
                     Add User
-                </button>
+                </motion.button>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="bg-white rounded-2xl border border-slate-200 overflow-hidden"
+            >
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
-                            <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 font-semibold">
-                                <th className="px-6 py-4 whitespace-nowrap">Name</th>
-                                <th className="px-6 py-4 whitespace-nowrap">Email</th>
-                                <th className="px-6 py-4 whitespace-nowrap">Role/Specialization</th>
-                                <th className="px-6 py-4 text-right whitespace-nowrap">Actions</th>
+                            <tr className="bg-slate-50/80 border-b border-slate-100">
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Name</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Email</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Role/Specialization</th>
+                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-slate-50">
                             {users.length === 0 ? (
                                 <tr>
-                                    <td colSpan="4" className="px-6 py-8 text-center text-slate-500 font-medium">
-                                        <div className="flex flex-col items-center gap-2 py-4">
-                                            <Info size={32} className="text-slate-300" />
-                                            <p>No users found. Click "Add User" to create one.</p>
+                                    <td colSpan="4" className="px-6 py-12 text-center">
+                                        <div className="flex flex-col items-center gap-3">
+                                            <div className="p-4 rounded-full bg-slate-50">
+                                                <Info size={28} className="text-slate-300" />
+                                            </div>
+                                            <p className="text-sm font-semibold text-slate-400">No users found</p>
+                                            <p className="text-xs text-slate-400">Click "Add User" to create one</p>
                                         </div>
                                     </td>
                                 </tr>
                             ) : (
-                                users.map((user) => (
-                                    <tr key={user.id} className="hover:bg-slate-50/80 transition group">
-                                        <td className="px-6 py-4 font-bold text-slate-900">{user.full_name}</td>
-                                        <td className="px-6 py-4 text-slate-600 font-medium font-mono text-sm">{user.email}</td>
+                                users.map((user, index) => (
+                                    <motion.tr
+                                        key={user.id}
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        transition={{ delay: index * 0.03 }}
+                                        className="hover:bg-slate-50/50 transition-colors group"
+                                    >
+                                        <td className="px-6 py-4 font-semibold text-slate-900">{user.full_name}</td>
+                                        <td className="px-6 py-4 text-slate-600 font-medium text-sm">{user.email}</td>
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col gap-1">
-                                                <span className={`w-fit px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider shadow-sm border ${user.role === 'DOCTOR' ? 'bg-blue-50 text-blue-700 border-blue-100' :
-                                                    user.role === 'RECEPTIONIST' ? 'bg-purple-50 text-purple-700 border-purple-100' :
-                                                        'bg-slate-50 text-slate-700 border-slate-100'
+                                                <span className={`w-fit px-2.5 py-1 rounded-lg text-[10px] font-semibold uppercase tracking-wide ${user.role === 'DOCTOR' ? 'bg-blue-50 text-blue-600' :
+                                                    user.role === 'RECEPTIONIST' ? 'bg-cyan-50 text-cyan-600' :
+                                                        'bg-slate-50 text-slate-600'
                                                     }`}>
                                                     {user.role}
                                                 </span>
                                                 {user.specialization && (
-                                                    <span className="text-xs text-slate-400 font-bold ml-1">
+                                                    <span className="text-xs text-slate-400 font-semibold">
                                                         {user.specialization}
                                                     </span>
                                                 )}
@@ -254,10 +276,10 @@ export default function AdminUsers() {
                                                         e.stopPropagation();
                                                         handleOpenModal(user);
                                                     }}
-                                                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                                                    className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                                                     title="Edit User"
                                                 >
-                                                    <Pencil size={18} />
+                                                    <Pencil size={16} />
                                                 </button>
                                                 <button
                                                     type="button"
@@ -265,20 +287,20 @@ export default function AdminUsers() {
                                                         e.stopPropagation();
                                                         handleDelete(user.id, user.role);
                                                     }}
-                                                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
                                                     title="Delete User"
                                                 >
-                                                    <Trash2 size={18} />
+                                                    <Trash2 size={16} />
                                                 </button>
                                             </div>
                                         </td>
-                                    </tr>
+                                    </motion.tr>
                                 ))
                             )}
                         </tbody>
                     </table>
                 </div>
-            </div>
+            </motion.div>
 
             {/* Modal */}
             <AnimatePresence>
@@ -297,18 +319,18 @@ export default function AdminUsers() {
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
                             className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden relative z-10 flex flex-col max-h-[90vh]"
                         >
-                            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${editingUser ? 'bg-indigo-100 text-indigo-600' : 'bg-emerald-100 text-emerald-600'}`}>
-                                        {editingUser ? <Pencil size={20} /> : <Plus size={20} />}
+                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${editingUser ? 'bg-blue-100 text-blue-600' : 'bg-blue-100 text-blue-600'}`}>
+                                        {editingUser ? <Pencil size={18} /> : <Plus size={18} />}
                                     </div>
                                     <div>
-                                        <h3 className="font-black text-slate-900">{editingUser ? 'Edit User Profile' : 'Register New User'}</h3>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{editingUser ? 'Update Information' : 'Enter Details Below'}</p>
+                                        <h3 className="font-bold text-slate-900 text-lg">{editingUser ? 'Edit User Profile' : 'Register New User'}</h3>
+                                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{editingUser ? 'Update Information' : 'Enter Details Below'}</p>
                                     </div>
                                 </div>
                                 <button onClick={handleCloseModal} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all">
-                                    <X size={20} />
+                                    <X size={18} />
                                 </button>
                             </div>
                             <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto custom-scrollbar">
@@ -434,7 +456,7 @@ export default function AdminUsers() {
                                     <button
                                         type="submit"
                                         disabled={loading}
-                                        className="flex-[2] px-4 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 hover:shadow-xl hover:shadow-indigo-500/30 disabled:opacity-50 disabled:cursor-not-allowed font-black tracking-widest uppercase text-xs transition-all flex items-center justify-center gap-2"
+                                        className="flex-[2] px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 hover:shadow-xl hover:shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed font-semibold uppercase text-xs transition-all flex items-center justify-center gap-2"
                                     >
                                         {loading ? (
                                             <>

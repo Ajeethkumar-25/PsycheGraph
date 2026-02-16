@@ -97,9 +97,9 @@ export default function Layout() {
             case 'RECEPTIONIST':
                 return {
                     label: 'Receptionist',
-                    color: 'from-orange-500 to-amber-500',
-                    bg: 'bg-orange-50',
-                    text: 'text-orange-600'
+                    color: 'from-indigo-500 to-indigo-600',
+                    bg: 'bg-indigo-50',
+                    text: 'text-indigo-600'
                 };
             default:
                 return {
@@ -141,7 +141,7 @@ export default function Layout() {
     }
 
     return (
-        <div className="flex h-screen bg-slate-50/50 relative overflow-hidden">
+        <div className="flex h-screen bg-[#062f3f] relative overflow-hidden">
             {/* Success Toast Notification */}
             <AnimatePresence>
                 {successMessage && (
@@ -149,18 +149,18 @@ export default function Layout() {
                         initial={{ opacity: 0, x: -20, y: 20 }}
                         animate={{ opacity: 1, x: 0, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95 }}
-                        className="fixed top-6 lg:top-8 left-6 lg:left-8 z-[100] p-4 bg-emerald-50 border-2 border-emerald-100 rounded-2xl flex items-center gap-3 shadow-2xl shadow-emerald-500/20 backdrop-blur-md"
+                        className="fixed top-6 lg:top-8 left-6 lg:left-8 z-[100] p-4 bg-emerald-500/10 border-2 border-emerald-500/20 rounded-2xl flex items-center gap-3 shadow-2xl shadow-emerald-500/10 backdrop-blur-md"
                     >
                         <div className="h-8 w-8 bg-emerald-500 text-white rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
                             <CheckCircle2 size={18} />
                         </div>
                         <div>
-                            <p className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em] leading-none mb-1">System Message</p>
-                            <p className="text-sm font-black text-emerald-900 uppercase tracking-tight">{successMessage}</p>
+                            <p className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.2em] leading-none mb-1">System Message</p>
+                            <p className="text-sm font-black text-white uppercase tracking-tight">{successMessage}</p>
                         </div>
                         <button
                             onClick={() => dispatch(clearSuccessMessage())}
-                            className="ml-4 p-1 hover:bg-emerald-100 rounded-lg transition-colors text-emerald-400"
+                            className="ml-4 p-1 hover:bg-emerald-500/10 rounded-lg transition-colors text-emerald-400"
                         >
                             <X size={14} />
                         </button>
@@ -176,7 +176,7 @@ export default function Layout() {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={() => setIsSidebarOpen(false)}
-                        className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+                        className="fixed inset-0 bg-black/60 z-40 lg:hidden backdrop-blur-sm"
                     />
                 )}
             </AnimatePresence>
@@ -185,12 +185,12 @@ export default function Layout() {
                 <motion.div
                     animate={{ scale: [1, 1.2, 1], rotate: [0, 90, 0] }}
                     transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
-                    className="absolute -top-40 -left-40 w-80 h-80 bg-primary-400/5 rounded-full blur-3xl"
+                    className="absolute -top-40 -left-40 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl"
                 />
                 <motion.div
                     animate={{ scale: [1, 1.3, 1], rotate: [0, -90, 0] }}
                     transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
-                    className="absolute -bottom-40 -right-40 w-80 h-80 bg-purple-400/5 rounded-full blur-3xl"
+                    className="absolute -bottom-40 -right-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl"
                 />
             </div>
 
@@ -201,45 +201,33 @@ export default function Layout() {
                     x: isDesktop ? 0 : (isSidebarOpen ? 0 : '-100%')
                 }}
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="w-72 fixed lg:relative inset-y-0 left-0 z-50 backdrop-blur-xl bg-white/80 border-r border-white/50 flex flex-col shadow-[rgba(0,0,15,0.05)_10px_0px_20px_-5px]"
+                className="w-72 fixed lg:relative inset-y-0 left-0 z-50 bg-[#062f3f] border-r border-white/5 flex flex-col shadow-2xl"
             >
                 {/* Logo Section */}
-                <div className="p-6 lg:p-8 pb-4 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
+                <div className="p-6 pb-4 flex items-center justify-between gap-3 border-b border-white/5">
+                    <div className="flex items-center gap-3">
                         <motion.div
                             whileHover={{ scale: 1.05, rotate: 5 }}
-                            className="bg-gradient-to-br from-primary-600 to-primary-700 p-2.5 rounded-xl text-white shadow-lg shadow-primary-500/30"
+                            className="bg-gradient-to-br from-blue-500 to-cyan-500 p-2 rounded-xl text-white shadow-lg shadow-cyan-500/30"
                         >
-                            <BrainCircuit size={28} />
+                            <BrainCircuit size={24} />
                         </motion.div>
                         <div>
-                            <span className="text-2xl font-black text-slate-900 tracking-tight block leading-none">PsycheGraph</span>
-                            <span className="text-[10px] font-bold text-primary-600 uppercase tracking-[0.2em] mt-1 block">Enterprise docs</span>
+                            <span className="text-xl font-black text-white tracking-tight block leading-none">PsycheGraph</span>
+                            <span className="text-[9px] font-semibold text-cyan-400 uppercase tracking-wider mt-0.5 block opacity-80">Healthcare Platform</span>
                         </div>
                     </div>
                     {/* Close button for mobile */}
                     <button
                         onClick={() => setIsSidebarOpen(false)}
-                        className="lg:hidden p-2 hover:bg-slate-100 rounded-xl transition-colors"
+                        className="lg:hidden p-1.5 hover:bg-white/5 rounded-lg transition-colors"
                     >
-                        <X size={20} className="text-slate-500" />
+                        <X size={18} className="text-white/60" />
                     </button>
                 </div>
 
-                {/* Search Bar - Aesthetic addition */}
-                {/* <div className="px-6 mb-4">
-                    <div className="relative group">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={16} />
-                        <input
-                            type="text"
-                            placeholder="Quick find..."
-                            className="w-full bg-slate-100/50 border-none rounded-xl py-2 pl-10 pr-4 text-xs font-medium focus:ring-2 focus:ring-primary-500/20 outline-none transition-all placeholder:text-slate-400"
-                        />
-                    </div>
-                </div> */}
-
-                <nav className="flex-1 px-4 py-4 space-y-2 overflow-y-auto custom-scrollbar">
-                    <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Main Menu</p>
+                <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto custom-scrollbar">
+                    <p className="px-3 text-[10px] font-semibold text-white/30 uppercase tracking-wider mb-3">Navigation</p>
                     {navItems.map((item) => {
                         const isActive = location.pathname === item.path;
                         return (
@@ -250,32 +238,25 @@ export default function Layout() {
                                 className="relative group block"
                             >
                                 <motion.div
-                                    whileHover={{ x: 5 }}
+                                    whileHover={{ x: 4 }}
                                     className={cn(
-                                        "flex items-center gap-3 px-4 py-3 rounded-2xl transition-all relative overflow-hidden",
+                                        "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all relative overflow-hidden",
                                         isActive
-                                            ? "text-primary-600"
-                                            : "text-slate-500 hover:text-slate-900"
+                                            ? "text-white bg-white/10"
+                                            : "text-white/60 hover:text-white hover:bg-white/5"
                                     )}
                                 >
-                                    {isActive && (
-                                        <motion.div
-                                            layoutId="nav-active"
-                                            className="absolute inset-0 bg-primary-50 rounded-2xl z-0"
-                                            transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                                        />
-                                    )}
                                     <div className={cn(
-                                        "relative z-10 transition-transform duration-300 group-hover:scale-110",
-                                        isActive && "text-primary-600"
+                                        "relative z-10 transition-all",
+                                        isActive && "text-cyan-400"
                                     )}>
-                                        <item.icon size={20} />
+                                        <item.icon size={18} strokeWidth={2.5} />
                                     </div>
                                     <span className="relative z-10 font-bold text-sm tracking-tight">{item.name}</span>
                                     {isActive && (
                                         <motion.div
-                                            layoutId="nav-pill"
-                                            className="absolute right-3 w-1.5 h-1.5 rounded-full bg-primary-500 z-10"
+                                            layoutId="nav-indicator"
+                                            className="absolute right-2 w-1 h-1 rounded-full bg-cyan-400 z-10"
                                             transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
                                         />
                                     )}
@@ -286,36 +267,34 @@ export default function Layout() {
                 </nav>
 
                 <div className="p-4 mt-auto">
-                    {/* User Profile Card Removed */}
-
-                    <div className="flex items-center justify-center gap-2 text-[10px] font-bold text-slate-400">
-                        <Sparkles size={10} className="text-primary-400" />
+                    <div className="flex items-center justify-center gap-2 text-[9px] font-bold text-white/20">
+                        <Sparkles size={10} className="text-cyan-500 opacity-50" />
                         <span>V 2.0.4 PREMIUM</span>
                     </div>
                 </div>
             </motion.aside>
 
             {/* Main Content */}
-            <main className="flex-1 relative z-10 overflow-auto custom-scrollbar lg:ml-0">
-                {/* Elegant Top Header */}
-                <header className="sticky top-0 h-16 lg:h-20 backdrop-blur-md bg-white/60 border-b border-white/50 flex items-center justify-between px-4 lg:px-10 z-30 shadow-sm">
+            <main className="flex-1 relative z-10 overflow-auto custom-scrollbar lg:ml-0 bg-slate-50">
+                {/* Elegant Top Header - Dark Theme Match */}
+                <header className="sticky top-0 h-16 lg:h-20 backdrop-blur-xl bg-[#062f3f] border-b border-white/5 flex items-center justify-between px-4 lg:px-10 z-30 shadow-md">
                     {/* Mobile Menu Button */}
                     <button
                         onClick={() => setIsSidebarOpen(true)}
-                        className="lg:hidden p-2 hover:bg-slate-100 rounded-xl transition-colors"
+                        className="lg:hidden p-2 hover:bg-white/5 rounded-xl transition-colors"
                     >
-                        <Menu size={24} className="text-slate-700" />
+                        <Menu size={24} className="text-white/80" />
                     </button>
                     <div className="flex items-center gap-4 lg:gap-6">
-                        <div className="hidden lg:flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        <div className="hidden lg:flex items-center gap-2 text-xs font-bold text-white/40 uppercase tracking-widest">
                             <span>Platform</span>
                             <ChevronRight size={14} />
-                            <span className="text-primary-600">{navItems.find(i => i.path === location.pathname)?.name || 'Home'}</span>
+                            <span className="text-cyan-400 font-black">{navItems.find(i => i.path === location.pathname)?.name || 'Home'}</span>
                         </div>
                     </div>
 
                     <div className="flex items-center gap-2 lg:gap-4">
-                        
+
 
                         <div className="hidden sm:block h-10 w-px bg-slate-200 mx-2" />
 
@@ -324,7 +303,7 @@ export default function Layout() {
                             <motion.button
                                 whileHover={{ scale: 1.02 }}
                                 onClick={() => setIsProfileOpen(!isProfileOpen)}
-                                className="flex items-center gap-2 lg:gap-3 pl-1 pr-2 lg:pr-3 py-1 bg-white rounded-xl lg:rounded-2xl shadow-sm border border-slate-100 overflow-hidden cursor-pointer"
+                                className="flex items-center gap-2 lg:gap-3 pl-1 pr-2 lg:pr-3 py-1 bg-white/5 hover:bg-white/10 rounded-xl lg:rounded-2xl shadow-lg border border-white/5 overflow-hidden cursor-pointer backdrop-blur-md transition-all"
                             >
                                 <div className={cn(
                                     "h-7 w-7 lg:h-8 lg:w-8 rounded-lg lg:rounded-xl flex items-center justify-center text-white text-xs lg:text-sm font-bold bg-gradient-to-br",
@@ -334,8 +313,8 @@ export default function Layout() {
                                     {(user?.full_name?.[0] || user?.sub?.[0] || 'U')?.toUpperCase()}
                                 </div>
                                 <div className="hidden md:block text-left">
-                                    <p className="text-[11px] font-black text-slate-900 leading-none">{user?.full_name || user?.sub}</p>
-                                    <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">{roleConfig.label}</p>
+                                    <p className="text-[11px] font-black text-white leading-none">{user?.full_name || user?.sub}</p>
+                                    <p className="text-[10px] font-bold text-white/40 mt-1 uppercase tracking-tighter">{roleConfig.label}</p>
                                 </div>
                             </motion.button>
 

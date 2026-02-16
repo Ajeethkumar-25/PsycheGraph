@@ -12,7 +12,8 @@ import {
     Search,
     UserPlus,
     BarChart3,
-    Sparkles
+    Sparkles,
+    Clock
 } from 'lucide-react';
 import { fetchUsers } from '../../store/slices/AllUserSlice';
 import { fetchPatients } from '../../store/slices/PatientSlice';
@@ -44,28 +45,36 @@ export default function AdminDashboard() {
             label: 'Active Doctors',
             value: doctorsCount,
             icon: Stethoscope,
-            gradient: 'from-blue-500 to-cyan-500',
+            color: 'blue',
+            bgColor: 'bg-blue-50',
+            textColor: 'text-blue-600',
             change: '+2 this month'
         },
         {
             label: 'Receptionists',
             value: receptionistsCount,
             icon: UserCheck,
-            gradient: 'from-emerald-500 to-teal-500',
+            color: 'cyan',
+            bgColor: 'bg-cyan-50',
+            textColor: 'text-cyan-600',
             change: 'Stable'
         },
         {
             label: 'Total Patients',
             value: patientsCount,
             icon: Users,
-            gradient: 'from-purple-500 to-pink-500',
+            color: 'blue',
+            bgColor: 'bg-blue-50',
+            textColor: 'text-blue-600',
             change: '+15% growth'
         },
         {
             label: 'Appointments',
             value: totalAppointments,
             icon: Calendar,
-            gradient: 'from-orange-500 to-amber-500',
+            color: 'cyan',
+            bgColor: 'bg-cyan-50',
+            textColor: 'text-cyan-600',
             change: `${todayAppointments} today`
         },
     ];
@@ -77,7 +86,7 @@ export default function AdminDashboard() {
                     animate={{ rotate: 360 }}
                     transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                 >
-                    <Activity className="text-primary-500" size={40} />
+                    <Activity className="text-blue-500" size={40} />
                 </motion.div>
             </div>
         );
@@ -86,167 +95,158 @@ export default function AdminDashboard() {
     const recentActivity = [
         ...users.slice(0, 3).map(u => ({ type: 'user', name: u.full_name, role: u.role, time: 'Recently joined' })),
         ...patients.slice(0, 2).map(p => ({ type: 'patient', name: p.full_name, role: 'PATIENT', time: 'New registration' }))
-    ].sort(() => Math.random() - 0.5); // Simple shuffle for variety
-
-    const containerVariants = {
-        hidden: { opacity: 0 },
-        visible: {
-            opacity: 1,
-            transition: { staggerChildren: 0.1 }
-        }
-    };
-
-    const itemVariants = {
-        hidden: { opacity: 0, y: 20 },
-        visible: { opacity: 1, y: 0 }
-    };
+    ].sort(() => Math.random() - 0.5);
 
     return (
-        <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-            className="space-y-8 pb-10"
-        >
+        <div className="space-y-6">
             {/* Header */}
-            <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col md:flex-row md:items-end justify-between gap-4"
+            >
                 <div>
-                    <h1 className="text-4xl font-black text-slate-900 tracking-tight mb-2">
-                        Organization <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-600 to-purple-600">Analytics</span>
+                    <p className="text-sm font-semibold text-blue-600 mb-1">Hospital Management</p>
+                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+                        Organization Dashboard
                     </h1>
-                    <p className="text-slate-500 font-medium flex items-center gap-2">
-                        <BarChart3 size={18} className="text-primary-500" />
-                        Overview of clinic operations and staff management.
+                    <p className="text-slate-500 mt-1 flex items-center gap-2">
+                        <BarChart3 size={16} />
+                        Overview of clinic operations and staff management
                     </p>
                 </div>
-                {/* <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => window.location.href = '/admin/users'}
-                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-2xl shadow-xl shadow-primary-500/30 font-bold"
-                >
-                    <UserPlus size={18} />
-                    ADD NEW STAFF
-                </motion.button> */}
             </motion.div>
 
             {/* Stats Grid */}
-            <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+            >
                 {stats.map((stat, index) => {
                     const Icon = stat.icon;
                     return (
                         <motion.div
                             key={stat.label}
-                            whileHover={{ y: -5, scale: 1.02 }}
-                            className="relative group"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: index * 0.05 }}
+                            whileHover={{ y: -4 }}
+                            className="bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-lg transition-all"
                         >
-                            <div className="backdrop-blur-xl bg-white/80 p-6 rounded-3xl shadow-xl border border-white/50 overflow-hidden">
-                                <div className={`absolute inset-0 bg-gradient-to-br ${stat.gradient} opacity-0 group-hover:opacity-5 transition-opacity`} />
-                                <div className="flex items-start justify-between mb-4">
-                                    <div className={`p-3 rounded-2xl bg-gradient-to-br ${stat.gradient} shadow-lg shadow-primary-500/20`}>
-                                        <Icon size={24} className="text-white" />
-                                    </div>
-                                    <div className="flex items-center gap-1 text-[10px] font-black text-emerald-600 uppercase tracking-wider bg-emerald-50 px-2 py-1 rounded-full">
-                                        <TrendingUp size={12} />
-                                        {stat.change}
-                                    </div>
+                            <div className="flex items-start justify-between mb-4">
+                                <div className={`p-3 rounded-xl ${stat.bgColor}`}>
+                                    <Icon size={20} className={stat.textColor} strokeWidth={2.5} />
                                 </div>
-                                <p className="text-sm font-bold text-slate-400 mb-1">{stat.label}</p>
-                                <p className="text-3xl font-black text-slate-900">{stat.value}</p>
+                                <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg flex items-center gap-1">
+                                    <TrendingUp size={12} />
+                                    {stat.change}
+                                </span>
                             </div>
+                            <p className="text-sm font-semibold text-slate-500 mb-1">{stat.label}</p>
+                            <p className="text-3xl font-bold text-slate-900">{stat.value}</p>
                         </motion.div>
                     );
                 })}
             </motion.div>
 
-            {/* Quick Actions & Content */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Actions Panel */}
+            {/* Quick Actions & Recent Activity */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Upcoming Appointments Panel */}
                 <motion.div
-                    variants={itemVariants}
-                    className="backdrop-blur-xl bg-white/80 rounded-[2.5rem] shadow-xl border border-white/50 overflow-hidden flex flex-col p-8"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                    className="bg-white rounded-2xl border border-slate-200 p-6"
                 >
-                    <h3 className="text-xl font-black text-slate-900 tracking-tight mb-6 flex items-center gap-2">
-                        <Sparkles size={24} className="text-primary-600" />
-                        Quick Actions
+                    <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                        <Calendar size={20} className="text-blue-600" />
+                        Today's Appointments
                     </h3>
-                    <div className="grid grid-cols-2 gap-4">
-                        {[
-                            {
-                                title: 'Add Doctor',
-                                icon: Stethoscope,
-                                color: 'blue',
-                                path: '/admin/users'
-                            },
-                            {
-                                title: 'Add Staff',
-                                icon: UserPlus,
-                                color: 'purple',
-                                path: '/admin/users'
-                            },
-                            {
-                                title: 'All Users',
-                                icon: Users,
-                                color: 'emerald',
-                                path: '/admin/users'
-                            },
-                            {
-                                title: 'Analytics',
-                                icon: BarChart3,
-                                color: 'orange',
-                                path: '#'
-                            },
-                        ].map((action) => (
-                            <motion.button
-                                key={action.title}
-                                whileHover={{ scale: 1.02 }}
-                                whileTap={{ scale: 0.98 }}
-                                onClick={() => action.path !== '#' && (window.location.href = action.path)}
-                                className="p-4 rounded-3xl border-2 border-slate-50 hover:border-primary-100 hover:bg-primary-50/30 transition-all text-left flex flex-col gap-3 group"
-                            >
-                                <div className={`p-3 rounded-2xl bg-${action.color}-50 text-${action.color}-600 w-fit group-hover:bg-${action.color}-600 group-hover:text-white transition-all`}>
-                                    <action.icon size={20} />
+                    <div className="space-y-3">
+                        {todayAppointments > 0 ? (
+                            appointments
+                                .filter(app => app.date === today)
+                                .slice(0, 4)
+                                .map((appointment, idx) => (
+                                    <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
+                                                <Calendar size={16} />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-semibold text-slate-900 text-sm">
+                                                    {appointment.patient_name || 'Patient'}
+                                                </h4>
+                                                <p className="text-[10px] font-semibold text-slate-400">
+                                                    Dr. {appointment.doctor_name || 'Assigned Doctor'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-semibold text-slate-500">
+                                                {appointment.time_slot || 'TBD'}
+                                            </span>
+                                            <span className={`px-2 py-1 rounded-lg text-[10px] font-semibold ${appointment.status === 'CONFIRMED' ? 'bg-emerald-50 text-emerald-600' :
+                                                    appointment.status === 'PENDING' ? 'bg-amber-50 text-amber-600' :
+                                                        'bg-slate-50 text-slate-600'
+                                                }`}>
+                                                {appointment.status}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))
+                        ) : (
+                            <div className="flex flex-col items-center justify-center py-10 text-center">
+                                <div className="p-4 bg-slate-50 rounded-full mb-4">
+                                    <Calendar size={28} className="text-slate-300" />
                                 </div>
-                                <span className="font-bold text-slate-700 text-sm">{action.title}</span>
-                            </motion.button>
-                        ))}
+                                <p className="text-sm font-semibold text-slate-400">No appointments today</p>
+                            </div>
+                        )}
                     </div>
                 </motion.div>
 
                 {/* Recent Activity Panel */}
                 <motion.div
-                    variants={itemVariants}
-                    className="backdrop-blur-xl bg-white/80 rounded-[2.5rem] shadow-xl border border-white/50 overflow-hidden flex flex-col p-8"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="bg-white rounded-2xl border border-slate-200 p-6"
                 >
-                    <h3 className="text-xl font-black text-slate-900 tracking-tight mb-6 flex items-center gap-2">
-                        <Activity size={24} className="text-primary-600" />
+                    <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                        <Activity size={20} className="text-blue-600" />
                         Recent Activity
                     </h3>
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                         {recentActivity.length > 0 ? recentActivity.map((activity, idx) => (
-                            <div key={idx} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50/50 border border-slate-100/50">
-                                <div className="flex items-center gap-4">
-                                    <div className={`p-2 rounded-xl ${activity.type === 'user' ? 'bg-blue-50 text-blue-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                                        {activity.type === 'user' ? <UserCheck size={18} /> : <Users size={18} />}
+                            <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                                <div className="flex items-center gap-3">
+                                    <div className={`p-2 rounded-lg ${activity.type === 'user' ? 'bg-blue-50 text-blue-600' : 'bg-cyan-50 text-cyan-600'}`}>
+                                        {activity.type === 'user' ? <UserCheck size={16} /> : <Users size={16} />}
                                     </div>
                                     <div>
-                                        <h4 className="font-bold text-slate-900 text-sm">{activity.name}</h4>
-                                        <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">{activity.role}</p>
+                                        <h4 className="font-semibold text-slate-900 text-sm">{activity.name}</h4>
+                                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{activity.role}</p>
                                     </div>
                                 </div>
-                                <span className="text-[10px] font-bold text-slate-400">{activity.time}</span>
+                                <span className="text-[10px] font-semibold text-slate-400 flex items-center gap-1">
+                                    <Clock size={10} />
+                                    {activity.time}
+                                </span>
                             </div>
                         )) : (
                             <div className="flex flex-col items-center justify-center py-10 text-center">
                                 <div className="p-4 bg-slate-50 rounded-full mb-4">
-                                    <Activity size={32} className="text-slate-300" />
+                                    <Activity size={28} className="text-slate-300" />
                                 </div>
-                                <p className="text-slate-500 font-medium">No recent activity found</p>
+                                <p className="text-sm font-semibold text-slate-400">No recent activity found</p>
                             </div>
                         )}
                     </div>
                 </motion.div>
             </div>
-        </motion.div>
+        </div>
     );
 }
