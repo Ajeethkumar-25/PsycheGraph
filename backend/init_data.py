@@ -1,8 +1,11 @@
 import os
 import asyncio
 import logging
+from dotenv import load_dotenv
 from app import models, auth, database
 from sqlalchemy.future import select
+
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -23,6 +26,10 @@ async def init_data():
         # Dynamic Super Admin Credentials
         admin_email = os.getenv("SUPER_ADMIN_EMAIL", "")
         admin_password = os.getenv("SUPER_ADMIN_PASSWORD", "")
+
+        if not admin_email or not admin_password:
+            logger.error("SUPER_ADMIN_EMAIL or SUPER_ADMIN_PASSWORD not set in .env")
+            return
 
         # Check if Super Admin exists
         result = await db.execute(select(models.User).where(models.User.email == admin_email))

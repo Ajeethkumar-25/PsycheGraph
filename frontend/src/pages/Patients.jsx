@@ -1,195 +1,244 @@
-import React, { useEffect, useState } from 'react';
-import api from '../api/axios';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
-import { Users, Search, Plus, Trash2, Edit2, ChevronRight } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import toast from 'react-hot-toast';
+import { useEffect, useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchPatients, createPatient, deletePatient } from '../store/slices/PatientSlice';
+import { Plus, Search, MoreVertical, UserPlus, PlayCircle, Users, X, Trash2, Calendar, Phone, Mail, Loader2 } from 'lucide-react';
+import SessionRecorder from '../components/SessionRecorder';
 
-const Patients = () => {
-    const [patients, setPatients] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [showModal, setShowModal] = useState(false);
-    const [search, setSearch] = useState('');
+export default function Patients() {
+    const dispatch = useDispatch();
+    const { list: patients, loading } = useSelector((state) => state.patients);
+    const { user } = useSelector((state) => state.auth);
 
-    // Form State
+    const [activePatientId, setActivePatientId] = useState(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [formData, setFormData] = useState({
         full_name: '',
-        date_of_birth: '',
+        email: '',
         contact_number: '',
-        email: ''
+        date_of_birth: '',
     });
 
-    const fetchPatients = async () => {
-        try {
-            setLoading(true);
-            const res = await api.get('/patients/');
-            setPatients(res.data);
-        } catch (err) {
-            toast.error('Failed to fetch patients');
-        } finally {
-            setLoading(false);
-        }
-    };
-
     useEffect(() => {
-        fetchPatients();
-    }, []);
+        dispatch(fetchPatients());
+    }, [dispatch]);
 
-    const handleCreate = async (e) => {
+    const handleAddPatient = async (e) => {
         e.preventDefault();
+        setIsSubmitting(true);
         try {
-            await api.post('/patients/', formData);
-            toast.success('Patient registered successfully');
-            setShowModal(false);
-            fetchPatients();
+            // Ensure DOB is in ISO format if needed, but the backend expects datetime
+            // Assuming the input type="date" provides YYYY-MM-DD
+            const patientPayload = {
+                ...formData,
+                date_of_birth: new Date(formData.date_of_birth).toISOString(),
+            };
+            await dispatch(createPatient(patientPayload)).unwrap();
+            setIsModalOpen(false);
+            setFormData({ full_name: '', email: '', contact_number: '', date_of_birth: '' });
         } catch (err) {
-            toast.error(err.response?.data?.detail || 'Registration failed');
+            console.error('Failed to add patient:', err);
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
-    const filteredPatients = patients.filter(p =>
-        p.full_name.toLowerCase().includes(search.toLowerCase()) ||
-        p.email?.toLowerCase().includes(search.toLowerCase())
-    );
+    const handleDelete = async (id) => {
+        if (window.confirm('Are you sure you want to delete this patient?')) {
+            try {
+                await dispatch(deletePatient(id)).unwrap();
+            } catch (err) {
+                console.error('Failed to delete patient:', err);
+            }
+        }
+    };
 
     return (
-        <div className="space-y-8">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-display font-bold text-white">Patients</h1>
-                    <p className="text-slate-400">Manage patient records and medical history.</p>
+        <div className="space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="relative w-full md:w-72">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                        <Search size={18} />
+                    </div>
+                    <input
+                        type="text"
+                        className="block w-full pl-10 pr-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none text-sm transition-all"
+                        placeholder="Search patients..."
+                    />
                 </div>
-                <Button onClick={() => setShowModal(true)}>
-                    <Plus size={20} />
-                    Add Patient
-                </Button>
             </div>
 
-            <div className="glass-card overflow-hidden">
-                <div className="p-4 border-b border-white/5 bg-white/5 flex items-center gap-4">
-                    <div className="relative flex-1 max-w-md">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                        <input
-                            className="w-full bg-dark-900/50 border border-white/5 rounded-xl py-2 pl-10 pr-4 text-sm focus:border-primary-500/50 outline-none"
-                            placeholder="Search patients by name or email..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                        />
-                    </div>
-                </div>
-
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
-                        <thead>
-                            <tr className="bg-white/5 text-[10px] uppercase tracking-widest text-slate-500 font-bold">
-                                <th className="px-6 py-4">Patient Name</th>
-                                <th className="px-6 py-4">Date of Birth</th>
-                                <th className="px-6 py-4">Contact</th>
-                                <th className="px-6 py-4">Email</th>
-                                <th className="px-6 py-4 text-right">Actions</th>
+                        <thead className="bg-slate-50 text-slate-500 text-sm font-semibold border-b border-slate-100">
+                            <tr>
+                                <th className="px-6 py-4 whitespace-nowrap">Name</th>
+                                <th className="px-6 py-4 whitespace-nowrap">Contact</th>
+                                <th className="px-6 py-4 whitespace-nowrap">Birth Date</th>
+                                <th className="px-6 py-4 whitespace-nowrap">Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-white/5">
-                            <AnimatePresence>
-                                {filteredPatients.map((p, i) => (
-                                    <motion.tr
-                                        key={p.id}
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        className="group hover:bg-white/5 transition-colors"
-                                    >
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-lg bg-primary-500/20 text-primary-400 flex items-center justify-center font-bold text-xs">
-                                                    {p.full_name.charAt(0)}
-                                                </div>
-                                                <span className="font-medium text-white">{p.full_name}</span>
+                        <tbody className="divide-y divide-slate-100">
+                            {patients.map((patient) => (
+                                <tr key={patient.id} className="hover:bg-slate-50 transition-colors group">
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="h-9 w-9 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-bold text-sm">
+                                                {patient.full_name[0]}
                                             </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-slate-400">{new Date(p.date_of_birth).toLocaleDateString()}</td>
-                                        <td className="px-6 py-4 text-sm text-slate-400">{p.contact_number}</td>
-                                        <td className="px-6 py-4 text-sm text-slate-400">{p.email || '-'}</td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button className="p-2 hover:bg-white/10 rounded-lg text-slate-400 transition-colors">
-                                                    <Edit2 size={16} />
-                                                </button>
-                                                <button className="p-2 hover:bg-accent-500/10 rounded-lg text-accent-500 transition-colors">
-                                                    <Trash2 size={16} />
-                                                </button>
+                                            <div>
+                                                <p className="font-medium text-slate-900">{patient.full_name}</p>
+                                                <p className="text-xs text-slate-500">{patient.email}</p>
                                             </div>
-                                        </td>
-                                    </motion.tr>
-                                ))}
-                            </AnimatePresence>
-                            {loading && (
-                                [1, 2, 3].map(i => (
-                                    <tr key={i} className="animate-pulse">
-                                        <td colSpan={5} className="px-6 py-4 h-16 bg-white/5" />
-                                    </tr>
-                                ))
-                            )}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-slate-600 text-sm">{patient.contact_number}</td>
+                                    <td className="px-6 py-4 text-slate-600 text-sm">
+                                        {new Date(patient.date_of_birth).toLocaleDateString()}
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => setActivePatientId(patient.id)}
+                                                className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors flex items-center gap-2 text-sm font-semibold"
+                                            >
+                                                <PlayCircle size={18} />
+                                                <span>Start Session</span>
+                                            </button>
+                                            <button
+                                                onClick={() => handleDelete(patient.id)}
+                                                className="text-slate-400 hover:text-red-600 p-2 transition-colors"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>
-            </div>
-
-            {/* Create Modal */}
-            <AnimatePresence>
-                {showModal && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={() => setShowModal(false)}
-                            className="absolute inset-0 bg-dark-950/80 backdrop-blur-sm"
-                        />
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="relative w-full max-w-lg glass-card p-8"
-                        >
-                            <h2 className="text-2xl font-bold text-white mb-6">Register New Patient</h2>
-                            <form onSubmit={handleCreate} className="space-y-4">
-                                <Input
-                                    label="Full Name"
-                                    required
-                                    value={formData.full_name}
-                                    onChange={e => setFormData({ ...formData, full_name: e.target.value })}
-                                />
-                                <Input
-                                    label="Date of Birth"
-                                    type="date"
-                                    required
-                                    value={formData.date_of_birth}
-                                    onChange={e => setFormData({ ...formData, date_of_birth: e.target.value })}
-                                />
-                                <Input
-                                    label="Contact Number"
-                                    required
-                                    value={formData.contact_number}
-                                    onChange={e => setFormData({ ...formData, contact_number: e.target.value })}
-                                />
-                                <Input
-                                    label="Email Address"
-                                    type="email"
-                                    value={formData.email}
-                                    onChange={e => setFormData({ ...formData, email: e.target.value })}
-                                />
-                                <div className="flex gap-4 pt-4">
-                                    <Button type="button" className="flex-1 bg-white/5 text-white" onClick={() => setShowModal(false)}>Cancel</Button>
-                                    <Button type="submit" className="flex-1">Register Patient</Button>
-                                </div>
-                            </form>
-                        </motion.div>
+                {patients.length === 0 && !loading && (
+                    <div className="p-12 text-center text-slate-500 flex flex-col items-center gap-4">
+                        <div className="bg-slate-50 p-4 rounded-full">
+                            <Users size={32} className="text-slate-400" />
+                        </div>
+                        <p className="font-medium">No patients in your records yet.</p>
                     </div>
                 )}
-            </AnimatePresence>
+                {loading && (
+                    <div className="p-12 text-center text-slate-400">Loading patients...</div>
+                )}
+            </div>
+
+            {/* Add Patient Modal */}
+            {isModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+                        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                            <h3 className="text-xl font-bold text-slate-900">Add New Patient</h3>
+                            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleAddPatient} className="p-6 space-y-4 overflow-y-auto custom-scrollbar">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-slate-500 uppercase ml-1">Full Name</label>
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                                        <Users size={18} />
+                                    </div>
+                                    <input
+                                        required
+                                        type="text"
+                                        value={formData.full_name}
+                                        onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                                        className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none text-sm transition-all"
+                                        placeholder="Enter patient's full name"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-slate-500 uppercase ml-1">Email Address</label>
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                                        <Mail size={18} />
+                                    </div>
+                                    <input
+                                        required
+                                        type="email"
+                                        value={formData.email}
+                                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                        className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none text-sm transition-all"
+                                        placeholder="email@example.com"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-bold text-slate-500 uppercase ml-1">Contact</label>
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                                            <Phone size={18} />
+                                        </div>
+                                        <input
+                                            required
+                                            type="tel"
+                                            value={formData.contact_number}
+                                            onChange={(e) => setFormData({ ...formData, contact_number: e.target.value })}
+                                            className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none text-sm transition-all"
+                                            placeholder="1234567890"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-bold text-slate-500 uppercase ml-1">Date of Birth</label>
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                                            <Calendar size={18} />
+                                        </div>
+                                        <input
+                                            required
+                                            type="date"
+                                            value={formData.date_of_birth}
+                                            onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })}
+                                            className="block w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none text-sm transition-all"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="pt-4 flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsModalOpen(false)}
+                                    className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isSubmitting}
+                                    className="flex-1 flex items-center justify-center gap-2 bg-primary-600 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-primary-700 transition-all shadow-lg shadow-primary-200 disabled:opacity-70"
+                                >
+                                    {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : 'Save Patient'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {activePatientId && (
+                <SessionRecorder
+                    patientId={activePatientId}
+                    onClose={() => setActivePatientId(null)}
+                />
+            )}
         </div>
     );
-};
-
-export default Patients;
+}
