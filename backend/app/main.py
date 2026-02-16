@@ -13,12 +13,47 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("main")
 
+from sqlalchemy import text
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Create tables
+    # 1. Startup: Create tables and repair schema (Transactional)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    logger.info("Database tables created.")
+        
+        # Auto-repair schema for 'users' table if columns are missing
+        result = await conn.execute(text("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'users'
+        """))
+        existing_columns = [row[0] for row in result.fetchall()]
+        
+        columns_to_add = {
+            "specialization": "VARCHAR",
+            "license_key": "VARCHAR",
+            "shift_timing": "VARCHAR"
+        }
+
+        for col, col_type in columns_to_add.items():
+            if col and col not in existing_columns:
+                logger.info(f"Adding missing column '{col}' to 'users' table...")
+                await conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} {col_type}"))
+                
+    # 2. Fix UserRole Enum if labels are missing (PostgreSQL specific - MUST BE OUTSIDE TRANSACTION)
+    async with engine.connect() as conn:
+        for role in ["SUPER_ADMIN", "HOSPITAL", "DOCTOR", "RECEPTIONIST"]:
+            try:
+                # We use AUTOCOMMIT to ensure this runs outside a transaction block
+                await conn.execution_options(isolation_level="AUTOCOMMIT").execute(
+                    text(f"ALTER TYPE userrole ADD VALUE IF NOT EXISTS '{role}'")
+                )
+                logger.info(f"Verified/Added UserRole: {role}")
+            except Exception as e:
+                # Ignore errors if not using Postgres or label already exists
+                pass
+                
+    logger.info("Database tables verified and synchronized.")
     yield
     # Shutdown
     await engine.dispose()

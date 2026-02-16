@@ -1,151 +1,105 @@
-import React, { useEffect, useState } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { Activity, Users, Calendar, Clipboard, TrendingUp, Clock, Building2, ShieldCheck, Headphones, HeartPulse, CheckSquare } from 'lucide-react';
-import { motion } from 'framer-motion';
-import api from '../api/axios';
-import toast from 'react-hot-toast';
+import { useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { Users, FileAudio, ClipboardList, Plus, ArrowRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { fetchPatients } from '../store/slices/PatientSlice';
+import { fetchSessions } from '../store/slices/SessionSlice';
 
-const Dashboard = () => {
-    const { user } = useAuth();
-    const [stats, setStats] = useState([]);
-    const [activities, setActivities] = useState([]);
-    const [loading, setLoading] = useState(true);
-
-    const getIcon = (type) => {
-        switch (type) {
-            case 'orgs': return Building2;
-            case 'users': return Users;
-            case 'patients': return Users;
-            case 'appointments': return Calendar;
-            case 'sessions': return Headphones;
-            case 'doctors': return HeartPulse;
-            case 'health': return Activity;
-            case 'license': return ShieldCheck;
-            case 'slots': return Clock;
-            case 'checkins': return CheckSquare;
-            default: return TrendingUp;
-        }
-    };
-
-    const getColor = (i) => {
-        const colors = [
-            'text-primary-400 bg-primary-500/10',
-            'text-blue-400 bg-blue-500/10',
-            'text-emerald-400 bg-emerald-500/10',
-            'text-purple-400 bg-purple-500/10'
-        ];
-        return colors[i % colors.length];
-    };
-
-    const fetchDashboardData = async () => {
-        try {
-            setLoading(true);
-            const statsRes = await api.get('/stats/');
-            setStats(statsRes.data);
-
-            // In a real app, we'd have an activity endpoint too
-            setActivities([
-                { text: 'System Online', user: 'Admin', time: 'Just now' },
-                { text: 'Auth Service Pulse', user: 'System', time: '5m ago' },
-                { text: 'New Session Detected', user: 'AI Engine', time: '12m ago' },
-            ]);
-        } catch (err) {
-            toast.error('Failed to load dashboard data');
-        } finally {
-            setLoading(false);
-        }
-    };
+export default function Dashboard() {
+    const dispatch = useDispatch();
+    const { list: patients } = useSelector((state) => state.patients);
+    const { list: sessions } = useSelector((state) => state.sessions);
 
     useEffect(() => {
-        fetchDashboardData();
-    }, [user]);
+        dispatch(fetchPatients());
+        dispatch(fetchSessions());
+    }, [dispatch]);
+
+    const stats = [
+        { label: 'Total Patients', value: patients.length, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
+        { label: 'Total Sessions', value: sessions.length, icon: FileAudio, color: 'text-purple-600', bg: 'bg-purple-50' },
+        { label: 'SOAP Notes', value: sessions.filter(s => s.soap_note).length, icon: ClipboardList, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    ];
 
     return (
         <div className="space-y-8">
-            <div className="flex flex-col gap-1">
-                <h1 className="text-3xl font-display font-bold text-white">
-                    {user?.role?.replace('_', ' ')} Overview
-                </h1>
-                <p className="text-slate-400">Welcome back, {user?.full_name}. Here is your live system report.</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {loading ? (
-                    [1, 2, 3, 4].map(i => (
-                        <div key={i} className="glass-card h-32 animate-pulse bg-white/5" />
-                    ))
-                ) : (
-                    stats.map((stat, i) => {
-                        const Icon = getIcon(stat.type);
-                        const style = getColor(i);
-                        return (
-                            <motion.div
-                                key={i}
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: i * 0.1 }}
-                                className="glass-card"
-                            >
-                                <div className={`w-12 h-12 ${style} rounded-xl flex items-center justify-center mb-4`}>
-                                    <Icon size={24} />
-                                </div>
-                                <div className="flex flex-col">
-                                    <span className="text-sm font-medium text-slate-400">{stat.label}</span>
-                                    <span className="text-2xl font-display font-bold text-white">{stat.value}</span>
-                                </div>
-                            </motion.div>
-                        );
-                    })
-                )}
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 space-y-6">
-                    <div className="glass-card h-80 flex flex-col items-center justify-center border-dashed border-white/5 bg-gradient-to-br from-white/5 to-transparent relative overflow-hidden">
-                        <Activity className="text-slate-700 mb-4 animate-float absolute opacity-20" size={120} />
-                        <div className="relative z-10 text-center px-8">
-                            <Sparkles className="text-primary-500 mb-4 mx-auto" size={32} />
-                            <h3 className="text-white font-bold text-xl mb-2">Real-time Analytics</h3>
-                            <p className="text-slate-500 text-sm max-w-sm">
-                                Your platform is now connected to the live backend. All data displayed is fetched in real-time from the database.
-                            </p>
+            {/* Stats Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {stats.map((stat) => (
+                    <div key={stat.label} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                        <div className="flex items-center gap-4">
+                            <div className={`${stat.bg} ${stat.color} p-3 rounded-xl`}>
+                                <stat.icon size={24} />
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-slate-500">{stat.label}</p>
+                                <p className="text-2xl font-bold text-slate-900">{stat.value}</p>
+                            </div>
                         </div>
+                    </div>
+                ))}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Recent Patients */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                        <h2 className="text-lg font-bold text-slate-900">Recent Patients</h2>
+                        <Link to="/patients" className="text-primary-600 text-sm font-semibold hover:text-primary-700 transition-colors">
+                            View All
+                        </Link>
+                    </div>
+                    <div className="divide-y divide-slate-50">
+                        {patients.slice(0, 5).map((patient) => (
+                            <div key={patient.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                                <div className="flex items-center gap-3">
+                                    <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold">
+                                        {patient.full_name[0]}
+                                    </div>
+                                    <div>
+                                        <p className="font-semibold text-slate-900">{patient.full_name}</p>
+                                        <p className="text-xs text-slate-500">{patient.contact_number}</p>
+                                    </div>
+                                </div>
+                                <button className="text-slate-400 hover:text-slate-600">
+                                    <Plus size={20} />
+                                </button>
+                            </div>
+                        ))}
+                        {patients.length === 0 && (
+                            <div className="p-8 text-center text-slate-500 italic">No patients found.</div>
+                        )}
                     </div>
                 </div>
 
-                <div className="space-y-6">
-                    <div className="glass-card">
-                        <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                            <Clock size={20} className="text-primary-500" />
-                            Recent Activity
-                        </h3>
-                        <div className="space-y-6">
-                            {activities.map((act, i) => (
-                                <div key={i} className="flex gap-4">
-                                    <div className="w-2 h-12 bg-white/5 rounded-full relative overflow-hidden">
-                                        <div className="absolute top-0 left-0 w-full h-1/2 bg-primary-500/50" />
-                                    </div>
-                                    <div className="flex-1">
-                                        <p className="text-sm font-medium text-slate-200">{act.text}</p>
-                                        <div className="flex items-center justify-between mt-1">
-                                            <span className="text-[10px] text-slate-500 font-bold uppercase">{act.user}</span>
-                                            <span className="text-[10px] text-slate-600">{act.time}</span>
-                                        </div>
-                                    </div>
+                {/* Recent Sessions */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="p-6 border-b border-slate-100">
+                        <h2 className="text-lg font-bold text-slate-900">Recent Sessions</h2>
+                    </div>
+                    <div className="divide-y divide-slate-50">
+                        {sessions.slice(0, 5).map((session) => (
+                            <Link
+                                key={session.id}
+                                to={`/sessions/${session.id}`}
+                                className="p-4 flex items-center gap-4 hover:bg-slate-50 transition-colors group"
+                            >
+                                <div className="bg-primary-50 text-primary-600 p-2 rounded-lg group-hover:bg-primary-600 group-hover:text-white transition-all">
+                                    <FileAudio size={20} />
                                 </div>
-                            ))}
-                        </div>
+                                <div className="flex-1">
+                                    <p className="font-semibold text-slate-900">Session #{session.id}</p>
+                                    <p className="text-xs text-slate-500">{new Date(session.date).toLocaleDateString()}</p>
+                                </div>
+                                <ArrowRight className="text-slate-300 group-hover:text-primary-600" size={16} />
+                            </Link>
+                        ))}
+                        {sessions.length === 0 && (
+                            <div className="p-8 text-center text-slate-500 italic">No sessions recorded yet.</div>
+                        )}
                     </div>
                 </div>
             </div>
         </div>
     );
-};
-
-const Sparkles = ({ className, size }) => (
-    <div className={className}>
-        <TrendingUp size={size} />
-    </div>
-);
-
-export default Dashboard;
+}
