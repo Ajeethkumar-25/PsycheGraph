@@ -21,6 +21,8 @@ export default function Dashboard() {
         { label: 'SOAP Notes', value: sessions.filter(s => s.soap_note).length, icon: ClipboardList, color: 'text-emerald-600', bg: 'bg-emerald-50' },
     ];
 
+
+    
     return (
         <div className="space-y-8">
             {/* Stats Grid */}
