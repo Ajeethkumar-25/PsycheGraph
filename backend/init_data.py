@@ -34,7 +34,6 @@ async def init_data():
             user = models.User(
                 email=admin_email,
                 hashed_password=hashed_pw,
-                full_name="Super Admin",
                 role=models.UserRole.SUPER_ADMIN,
                 organization_id=org.id
             )

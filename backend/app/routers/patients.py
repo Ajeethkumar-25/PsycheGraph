@@ -15,7 +15,7 @@ async def create_patient(
     # Logic: Hospital admin can create for their org, Receptionist for their org
     # Super Admin must provide organization_id
     org_id = patient.organization_id
-    if current_user.role != models.UserRole.SUPER_ADMIN:
+    if current_user.role != models.UserRole.HOSPITAL:
          org_id = current_user.organization_id
     
     if not org_id:
@@ -24,8 +24,10 @@ async def create_patient(
     new_patient = models.Patient(
         full_name=patient.full_name,
         date_of_birth=patient.date_of_birth.replace(tzinfo=None) if patient.date_of_birth else None,
-        contact_number=patient.contact_number,
+        phone=patient.contact_number,
         email=patient.email,
+        gender=patient.gender,
+        address=patient.address,
         organization_id=org_id,
         doctor_id=patient.doctor_id,
         created_by_id=current_user.id
@@ -42,7 +44,7 @@ async def get_patients(
 ):
     # Logic:
     # SUPER_ADMIN: All (or filtered)
-    # ADMIN: All in Org
+    # HOSPITAL: All in Org
     # RECEPTIONIST: All in Org
     # DOCTOR: Assigned patients OR All in Org (depending on detailed reqs, usually all in org for visibility)
     
@@ -53,7 +55,7 @@ async def get_patients(
         query = query.where(models.Patient.organization_id == current_user.organization_id)
     elif current_user.role == models.UserRole.DOCTOR:
         # Assigned patients
-        query = query.where(models.Patient.doctor_id == current_user.id)
+        query = query.where(models.Patient.doctor_id == current_user.doctor_id)
     elif current_user.role == models.UserRole.RECEPTIONIST:
         # Own patients (created by them)
         query = query.where(models.Patient.created_by_id == current_user.id)
@@ -75,7 +77,7 @@ async def get_patient(
     elif current_user.role == models.UserRole.HOSPITAL:
         query = query.where(models.Patient.organization_id == current_user.organization_id)
     elif current_user.role == models.UserRole.DOCTOR:
-        query = query.where(models.Patient.doctor_id == current_user.id)
+        query = query.where(models.Patient.doctor_id == current_user.doctor_id)
     elif current_user.role == models.UserRole.RECEPTIONIST:
         query = query.where(models.Patient.created_by_id == current_user.id)
     else:

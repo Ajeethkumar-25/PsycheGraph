@@ -154,18 +154,13 @@ async def register_user(
         raise HTTPException(status_code=400, detail="Email already registered")
         
     # 3. Create user
-    user_fields = extra_fields.copy()
-    if "doctor_id" in user_fields:
-        del user_fields["doctor_id"]
-
+    # Note: User table no longer has full_name or license_key.
+    
     new_user = models.User(
         email=user_data.email,
         hashed_password=auth.get_password_hash(user_data.password),
-        full_name=user_data.full_name,
         role=role,
-        organization_id=org.id,
-        license_key=user_data.license_key,  # Unified license field
-        **user_fields
+        organization_id=org.id
     )
     db.add(new_user)
     try:
@@ -180,13 +175,17 @@ async def register_user(
         if role == models.UserRole.DOCTOR:
             new_profile = models.Doctor(
                 id=new_user.id,
+                user_id=new_user.id,
+                full_name=user_data.full_name,
                 specialization=extra_fields.get("specialization"),
-                license_key=extra_fields.get("license_key") 
+                license_key=user_data.license_key
             )
             db.add(new_profile)
         elif role == models.UserRole.RECEPTIONIST:
             new_profile = models.Receptionist(
                 id=new_user.id,
+                user_id=new_user.id,
+                full_name=user_data.full_name,
                 specialization=extra_fields.get("specialization"),
                 shift_timing=extra_fields.get("shift_timing"),
                 doctor_id=extra_fields.get("doctor_id")

@@ -6,6 +6,7 @@ from .database import get_db
 from .models import User, UserRole
 from .auth import SECRET_KEY, ALGORITHM
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 
 # Changed from OAuth2PasswordBearer to HTTPBearer for manual token handling
 security = HTTPBearer()
@@ -25,7 +26,17 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     except JWTError:
         raise credentials_exception
     
-    result = await db.execute(select(User).where(User.email == email))
+    from sqlalchemy.orm import selectinload # Add import if missing, but it's not imported.
+    # Wait, need to add import line.
+    
+    result = await db.execute(
+        select(User)
+        .options(
+            selectinload(User.doctor_profile), 
+            selectinload(User.receptionist_profile)
+        )
+        .where(User.email == email)
+    )
     user = result.scalars().first()
     
     if user is None:

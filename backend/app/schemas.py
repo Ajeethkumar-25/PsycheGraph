@@ -83,13 +83,18 @@ class OrganizationOut(OrganizationBase):
     
     class Config:
         from_attributes = True
+        json_encoders = {
+            datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S")
+        }
 
 class PatientBase(BaseModel):
     full_name: str
     date_of_birth: datetime
     contact_number: str
     email: Optional[str] = None
-
+    gender: Optional[str] = None
+    address: Optional[str] = None
+    
 class PatientCreate(PatientBase):
     organization_id: Optional[int] = None
     doctor_id: Optional[int] = None
@@ -102,6 +107,9 @@ class PatientOut(PatientBase):
     
     class Config:
         from_attributes = True
+        json_encoders = {
+            datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S")
+        }
 
 class SessionBase(BaseModel):
     patient_id: int
@@ -121,6 +129,9 @@ class SessionOut(SessionBase):
     
     class Config:
         from_attributes = True
+        json_encoders = {
+            datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S")
+        }
 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
@@ -139,6 +150,8 @@ class PatientUpdate(BaseModel):
     date_of_birth: Optional[datetime] = None
     contact_number: Optional[str] = None
     email: Optional[str] = None
+    gender: Optional[str] = None
+    address: Optional[str] = None
     doctor_id: Optional[int] = None
 
 class AvailabilityBase(BaseModel):
@@ -154,18 +167,22 @@ class AvailabilityBatchCreate(BaseModel):
     organization_id: Optional[int] = None
     start_time: datetime
     end_time: datetime
-    duration_minutes: int = 15
+    duration_minutes: int = 30
+
 
 class AvailabilityOut(AvailabilityBase):
     id: int
     doctor_id: int
-    doctor_name: str
-    patient_name: str
+    doctor_name: Optional[str] = None
+    patient_name: Optional[str] = None
     organization_id: int
     is_booked: bool
 
     class Config:
         from_attributes = True
+        json_encoders = {
+            datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S")
+        }
 
 class AppointmentBase(BaseModel):
     patient_id: int
@@ -182,9 +199,14 @@ class AppointmentOut(AppointmentBase):
     id: int
     status: str
     organization_id: int
+    doctor_name: Optional[str] = None
+    patient_name: Optional[str] = None
 
     class Config:
         from_attributes = True
+        json_encoders = {
+            datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S")
+        }
 
 class AppointmentUpdate(BaseModel):
     status: Optional[str] = None

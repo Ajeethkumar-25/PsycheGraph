@@ -5,7 +5,9 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload, joinedload
 from typing import List, Optional
 from .. import models, schemas, dependencies, database
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+IST = timezone(timedelta(hours=5, minutes=30))
 
 router = APIRouter(prefix="/appointments", tags=["Appointments"])
 
@@ -19,6 +21,17 @@ async def create_availability(
     # Logic: Doctors create for themselves, Receptionists/Admins can create for any doctor in their org
     target_doctor_id = slot.doctor_id
     org_id = slot.organization_id or current_user.organization_id
+    
+    # Convert inputs to Naive IST
+    if slot.start_time.tzinfo:
+        start_naive = slot.start_time.astimezone(IST).replace(tzinfo=None, microsecond=0)
+    else:
+        start_naive = slot.start_time.replace(microsecond=0)
+
+    if slot.end_time.tzinfo:
+        end_naive = slot.end_time.astimezone(IST).replace(tzinfo=None, microsecond=0)
+    else:
+        end_naive = slot.end_time.replace(microsecond=0)
 
     if current_user.role == models.UserRole.RECEPTIONIST:
 
@@ -42,9 +55,8 @@ async def create_availability(
 
         # Also verify doctor exists in same org
         doc_res = await db.execute(
-            select(models.User).where(
-                models.User.id == target_doctor_id,
-                models.User.role == models.UserRole.DOCTOR,
+            select(models.Doctor).join(models.User).where(
+                models.Doctor.id == target_doctor_id,
                 models.User.organization_id == current_user.organization_id
             )
         )
@@ -55,9 +67,8 @@ async def create_availability(
     elif current_user.role == models.UserRole.HOSPITAL:
         # Hospital can manage any doctor in org
         doc_res = await db.execute(
-            select(models.User).where(
-                models.User.id == target_doctor_id,
-                models.User.role == models.UserRole.DOCTOR,
+            select(models.Doctor).join(models.User).where(
+                models.Doctor.id == target_doctor_id,
                 models.User.organization_id == current_user.organization_id
             )
         )
@@ -67,8 +78,8 @@ async def create_availability(
     new_slot = models.Availability(
         doctor_id=target_doctor_id,
         organization_id=org_id,
-        start_time=slot.start_time.replace(tzinfo=None) if slot.start_time else None,
-        end_time=slot.end_time.replace(tzinfo=None) if slot.end_time else None,
+        start_time=start_naive,
+        end_time=end_naive,
         is_booked=False
     )
     db.add(new_slot)
@@ -78,7 +89,7 @@ async def create_availability(
         select(models.Availability)
         .options(
             selectinload(models.Availability.doctor),
-            selectinload(models.Availability.appointment).selectinload(models.Appointment.patient)
+            selectinload(models.Availability.patient)
         )
         .where(models.Availability.id == new_slot.id)
     )
@@ -95,20 +106,36 @@ async def batch_create_availability(
     org_id = batch.organization_id or current_user.organization_id
 
     if current_user.role == models.UserRole.DOCTOR:
-        if target_doctor_id != current_user.id:
+        if target_doctor_id != current_user.doctor_id:
             raise HTTPException(status_code=403, detail="Doctors can only manage their own availability")
     elif current_user.role in [models.UserRole.RECEPTIONIST, models.UserRole.HOSPITAL]:
-        doc_res = await db.execute(select(models.User).where(models.User.id == target_doctor_id, models.User.organization_id == org_id))
+        doc_res = await db.execute(select(models.Doctor).join(models.User).where(models.Doctor.id == target_doctor_id, models.User.organization_id == org_id))
         if not doc_res.scalars().first():
              raise HTTPException(status_code=403, detail="Doctor not found in your organization")
 
     # Generate slots
     slots = []
-    current_time = batch.start_time.replace(tzinfo=None) if batch.start_time else None
-    batch_end_time = batch.end_time.replace(tzinfo=None) if batch.end_time else None
+    
+    if batch.start_time.tzinfo:
+        current_time = batch.start_time.astimezone(IST).replace(tzinfo=None, microsecond=0)
+    else:
+        current_time = batch.start_time.replace(microsecond=0)
+        
+    if batch.end_time.tzinfo:
+        batch_end_time = batch.end_time.astimezone(IST).replace(tzinfo=None, microsecond=0)
+    else:
+        batch_end_time = batch.end_time.replace(microsecond=0)
 
+    # Force 30 minute slots if that's the requirement, or just use batch.duration_minutes (which defaults to 30 now)
+    # The user asked for "Every 30 mins ... like 9:00 am, 9.30". 
+    # We will trust the input start_time but ensure duration is used.
+    
     while current_time and batch_end_time and current_time + timedelta(minutes=batch.duration_minutes) <= batch_end_time:
         slot_end = current_time + timedelta(minutes=batch.duration_minutes)
+        
+        # Check for existing overlap to prevent duplicates
+        # (Optional optimization: do a bulk check before loop)
+        
         new_slot = models.Availability(
             doctor_id=target_doctor_id,
             organization_id=org_id,
@@ -132,7 +159,7 @@ async def batch_create_availability(
         select(models.Availability)
         .options(
             selectinload(models.Availability.doctor),
-            selectinload(models.Availability.appointment).selectinload(models.Appointment.patient)
+            selectinload(models.Availability.patient)
         )
         .where(models.Availability.id.in_([s.id for s in slots]))
     )
@@ -149,7 +176,7 @@ async def get_availability(
 ):
     query = select(models.Availability).options(
         selectinload(models.Availability.doctor),
-        selectinload(models.Availability.appointment).selectinload(models.Appointment.patient)
+        selectinload(models.Availability.patient)
     )
     if doctor_id:
         query = query.where(models.Availability.doctor_id == doctor_id)
@@ -182,9 +209,23 @@ async def book_appointment(
         raise HTTPException(status_code=400, detail="Slot is already booked")
 
     # 2. Create Appointment
-    # In a real app, generate a unique Zoom/Meet link here
-    meet_link = f"https://meet.psychegraph.com/{booking.availability_id}-{booking.patient_id}"
+    # Generate Google Meet link
+    # Convert Naive IST slot time -> Aware UTC for Google
+    slot_start_ist = slot.start_time.replace(tzinfo=IST)
+    slot_end_ist = slot.end_time.replace(tzinfo=IST)
     
+    meet_link = calendar_service.create_event(
+        summary=f"Appointment: {current_user.full_name} with Dr. {slot.doctor.full_name if slot.doctor else 'Unknown'}",
+        start_time=slot_start_ist.astimezone(timezone.utc), # Pass UTC
+        end_time=slot_end_ist.astimezone(timezone.utc),
+        attendee_email=current_user.email 
+    )
+    
+    if not meet_link or "mock" in meet_link:
+         # Fallback if service fails or no credentials
+         if not meet_link:
+             meet_link = f"https://meet.psychegraph.com/{booking.availability_id}-{booking.patient_id}"
+
     new_app = models.Appointment(
         patient_id=booking.patient_id,
         doctor_id=slot.doctor_id,
@@ -197,13 +238,23 @@ async def book_appointment(
         status="SCHEDULED"
     )
     
-    # 3. Mark slot as booked
+    # 3. Mark slot as booked and link patient
     slot.is_booked = True
+    slot.patient_id = booking.patient_id
     
     db.add(new_app)
     await db.commit()
-    await db.refresh(new_app)
-    return new_app
+    
+    # Eager load for response
+    res = await db.execute(
+        select(models.Appointment)
+        .options(
+            selectinload(models.Appointment.doctor),
+            selectinload(models.Appointment.patient)
+        )
+        .where(models.Appointment.id == new_app.id)
+    )
+    return res.scalars().first()
 
 # 3. Cancellation / Slot Removal Logic
 @router.delete("/availability/{slot_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -247,13 +298,16 @@ async def get_appointments(
     current_user: models.User = Depends(dependencies.get_current_user),
     db: AsyncSession = Depends(database.get_db)
 ):
-    query = select(models.Appointment)
+    query = select(models.Appointment).options(
+        selectinload(models.Appointment.doctor),
+        selectinload(models.Appointment.patient)
+    )
     if current_user.role == models.UserRole.SUPER_ADMIN:
         pass
     elif current_user.role == models.UserRole.HOSPITAL:
         query = query.where(models.Appointment.organization_id == current_user.organization_id)
     elif current_user.role == models.UserRole.DOCTOR:
-        query = query.where(models.Appointment.doctor_id == current_user.id)
+        query = query.where(models.Appointment.doctor_id == current_user.doctor_id)
     elif current_user.role == models.UserRole.RECEPTIONIST:
         query = query.where(models.Appointment.organization_id == current_user.organization_id)
     else:

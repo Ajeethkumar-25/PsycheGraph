@@ -4,6 +4,10 @@ from app.models import Base
 
 async def reset_db():
     async with engine.begin() as conn:
+        print("Dropping legacy/blocking tables...")
+        from sqlalchemy import text
+        await conn.execute(text("DROP TABLE IF EXISTS audit_logs CASCADE"))
+        
         print("Dropping all tables...")
         await conn.run_sync(Base.metadata.drop_all)
         print("All tables dropped.")

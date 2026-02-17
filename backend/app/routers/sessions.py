@@ -29,7 +29,7 @@ async def create_session(
 ):
     # Logic: Doctors create for their patients, Hospital admin creates for their org
     if current_user.role == models.UserRole.DOCTOR:
-        actual_doctor_id = current_user.id
+        actual_doctor_id = current_user.doctor_id
     elif current_user.role in [models.UserRole.HOSPITAL, models.UserRole.SUPER_ADMIN]:
         if not doctor_id:
             raise HTTPException(status_code=400, detail="doctor_id is required when Admin creates a session")
@@ -100,7 +100,7 @@ async def get_sessions(
         # Hospital Admin sees sessions for their organization's patients
         query = query.join(models.Patient).where(models.Patient.organization_id == current_user.organization_id)
     elif current_user.role == models.UserRole.DOCTOR:
-        query = query.where(models.Session.doctor_id == current_user.id)
+        query = query.where(models.Session.doctor_id == current_user.doctor_id)
     elif current_user.role == models.UserRole.RECEPTIONIST: 
         # Receptionist sees sessions for patients they created
         query = query.join(models.Patient).where(models.Patient.created_by_id == current_user.id)
@@ -182,7 +182,7 @@ async def update_session(
         if not patient or patient.organization_id != current_user.organization_id:
              raise HTTPException(status_code=403, detail="Not authorized")
     elif current_user.role == models.UserRole.DOCTOR:
-        if session.doctor_id != current_user.id:
+        if session.doctor_id != current_user.doctor_id:
             raise HTTPException(status_code=403, detail="Not authorized to update this session")
     else:
         raise HTTPException(status_code=403, detail="Not authorized")
