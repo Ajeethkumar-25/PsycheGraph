@@ -145,7 +145,7 @@ export default function Layout() {
             {/* Success Toast Notification */}
             <AnimatePresence>
                 {successMessage && (
-                    <motion.div
+                    <motion.div 
                         initial={{ opacity: 0, x: -20, y: 20 }}
                         animate={{ opacity: 1, x: 0, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95 }}
@@ -165,13 +165,13 @@ export default function Layout() {
                             <X size={14} />
                         </button>
                     </motion.div>
-                )}
+                )} 
             </AnimatePresence>
 
             {/* Mobile Overlay */}
             <AnimatePresence>
                 {isSidebarOpen && (
-                    <motion.div
+                    <motion.div 
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}

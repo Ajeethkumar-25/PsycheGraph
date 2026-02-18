@@ -17,7 +17,8 @@ import {
 } from 'lucide-react';
 import { login, loginHospital, clearError, registerHospital } from '../store/slices/AllLoginSlice';
 import { useNavigate, Link } from 'react-router-dom';
-import loginSide from '../assets/login-side.jpg';
+import loginSide from '../assets/new-logo.png';
+
 
 export default function Auth() {
     const dispatch = useDispatch();
@@ -27,6 +28,7 @@ export default function Auth() {
     const [mode, setMode] = useState('login'); // 'login' or 'register'
     const [showPassword, setShowPassword] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [license_key, setLicenseKey] = useState(false);
 
     const [loginData, setLoginData] = useState({
         email: '',
@@ -71,7 +73,7 @@ export default function Auth() {
                 <motion.div
                     initial={{ scale: 0.8, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
-                    className="text-center space-y-6 p-12 bg-[#0f172a] rounded-3xl shadow-2xl max-w-md w-full mx-4 border border-slate-800"
+                    className="text-center space-y-6 p-8 md:p-12 bg-[#0f172a] rounded-3xl shadow-2xl max-w-md w-full mx-4 border border-slate-800"
                 >
                     <div className="h-24 w-24 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center mx-auto border border-emerald-500/20">
                         <CheckCircle2 size={48} className="animate-bounce" />
@@ -94,35 +96,57 @@ export default function Auth() {
     }
 
     return (
-        <div className="h-screen flex flex-col md:flex-row bg-[#070b10] font-sans overflow-hidden">
+        <div className="min-h-screen flex flex-col md:flex-row bg-[#070b10] font-sans overflow-x-hidden">
             {/* Left Side - Visual Panel (Exact Match Style) */}
-            <div className="w-full md:w-1/2 h-full relative flex flex-col items-center justify-center p-8 bg-[#070b10] border-r border-white/5 overflow-hidden">
-                {/* Background Image Wrapper */}
-                <div className="absolute inset-0 z-0">
-                    <img
-                        src={loginSide}
-                        alt="Brain Glow"
-                        className="w-full h-full object-cover"
+            <div className="w-full md:w-1/2 h-[40vh] md:h-screen relative flex flex-col items-center justify-center p-6 md:p-8 bg-[#070b10] border-b md:border-b-0 md:border-r border-white/5 overflow-hidden">
+                <div className="absolute inset-0 z-0 overflow-hidden bg-[#070b1]">
+                    <motion.div
+                        animate={{
+                            scale: [0.8, 0.85, 0.8], // Reduced scale to make image smaller
+                        }}
+                        transition={{
+                            duration: 3, // slightly slower for a calmer feel
+                            repeat: Infinity,
+                            ease: "easeInOut"
+                        }}
+                        className="absolute inset-0 z-0 h-full w-full flex items-center justify-center"
+                    >
+                        <img
+                            src={loginSide}
+                            alt="Brain Glow"
+                            className="max-w-[85%] max-h-[85%] object-contain opacity-50"
+                        />
+                    </motion.div>
+
+                    <motion.div
+                        animate={{
+                            opacity: [0.2, 0.5, 0.2], // softer glow
+                            scale: [0.8, 0.88, 0.8], // matching image scale
+                        }}
+                        transition={{
+                            duration: 2,
+                            repeat: Infinity,
+                            ease: "easeInOut"
+                        }}
+                        className="absolute inset-0 z-1 bg-[radial-gradient(circle_at_50%_50%,rgba(22, 192, 226, 0.25),transparent_70%)] mix-blend-screen blur-2xl"
                     />
-                    {/* Overlay to ensure text readability */}
-                    <div className="absolute inset-0 bg-black/10" />
+
+                    <div className="absolute inset-0 z-2 bg-gradient-to-b from-[#062F3F]/20 via-transparent to-[#062F3F]/40" />
                 </div>
 
                 {/* Visual Content */}
-                <div className="relative z-10 w-full max-w-lg flex flex-col items-center text-center mt-8">
-                    {/* Pulse Icon - Exact Screenshot Match */}
-                    <div className="mb-6">
-                        <div className="w-14 h-14 bg-[#217d91] rounded-2xl flex items-center justify-center shadow-lg transform transition-transform hover:scale-105">
-                            <Activity className="text-white w-8 h-8" strokeWidth={2.5} />
+                <div className="relative z-10 w-full max-w-sm md:max-w-lg flex flex-col items-center text-center">
+                    <div className="mb-4 md:mb-6">
+                        <div className="w-10 h-10 md:w-14 md:h-14 bg-[#070b10] rounded-xl md:rounded-2xl flex items-center justify-center shadow-lg transform transition-transform hover:scale-105">
+                            <Activity className="text-white w-6 h-6 md:w-8 md:h-8" strokeWidth={2.5} />
                         </div>
                     </div>
 
-                    {/* Branding Section (Exact Match) */}
-                    <div className="space-y-3">
-                        <h1 className="text-3xl md:text-4xl font-serif font-black text-white tracking-normal mb-1 drop-shadow-xl">
+                    <div className="space-y-2 md:space-y-3">
+                        <h1 className="text-2xl md:text-4xl font-serif font-black text-white tracking-normal mb-1 drop-shadow-xl">
                             PsycheGraph
                         </h1>
-                        <p className="text-white text-base md:text-lg font-normal tracking-wide max-w-sm mx-auto leading-tight opacity-90 mt-5">
+                        <p className="text-white text-sm md:text-lg font-normal tracking-wide max-w-[280px] md:max-w-sm mx-auto leading-tight opacity-90">
                             Advanced clinical operations platform for modern mental health practices
                         </p>
                     </div>
@@ -137,7 +161,7 @@ export default function Auth() {
             </div>
 
             {/* Right Side - Form Panel (Exact Match Style) */}
-            <div className="w-full md:w-1/2 h-full bg-white flex items-center justify-center p-6 md:p-8 lg:p-12 relative overflow-hidden">
+            <div className="w-full md:w-1/2 min-h-[60vh] md:h-screen bg-white flex items-center justify-center p-6 md:p-8 lg:p-12 relative overflow-hidden">
                 <div className="w-full max-w-md">
                     <AnimatePresence mode="wait">
                         {mode === 'login' ? (
@@ -158,13 +182,15 @@ export default function Auth() {
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-bold text-slate-700 ml-1">Email Address</label>
                                         <div className="relative group">
+                                            <Mail className="absolute left-4.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors w-4.5 h-4.5 z-20 pointer-events-none" />
                                             <input
                                                 type="email"
                                                 required
                                                 value={loginData.email}
                                                 onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
-                                                className="w-full bg-[#f8fafc] border border-slate-100 rounded-xl py-3.5 px-5 text-[#0f172a] font-medium placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all text-base shadow-sm"
-                                                placeholder="you@hospital.com"
+                                                autoComplete="off"
+                                                className="w-full bg-[#f8fafc] border border-slate-100 rounded-xl py-3.5 pl-12 pr-5 text-[#0f172a] font-medium placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all text-base shadow-sm"
+                                                placeholder="Enter your email"
                                             />
                                         </div>
                                     </div>
@@ -174,27 +200,29 @@ export default function Auth() {
                                             <label className="text-sm font-bold text-slate-700">Password</label>
                                         </div>
                                         <div className="relative group">
+                                            <Lock className="absolute left-4.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors w-4.5 h-4.5 z-20 pointer-events-none" />
                                             <input
                                                 type={showPassword ? 'text' : 'password'}
                                                 required
                                                 value={loginData.password}
                                                 onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
-                                                className="w-full bg-[#f8fafc] border border-slate-100 rounded-xl py-3.5 px-5 text-[#0f172a] font-medium placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all text-base shadow-sm"
-                                                placeholder="••••••••"
+                                                autoComplete="new-password"
+                                                className="w-full bg-[#f8fafc] border border-slate-100 rounded-xl py-3.5 pl-12 pr-11 text-[#0f172a] font-medium placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all text-base shadow-sm"
+                                                placeholder="Enter your password"
                                             />
                                             <button
                                                 type="button"
                                                 onClick={() => setShowPassword(!showPassword)}
                                                 className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
                                             >
-                                                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                                {showPassword ? <Eye size={20} /> : <EyeOff size={20} />}
                                             </button>
                                         </div>
-                                        <div className="flex justify-end pt-0.5">
+                                        {/* <div className="flex justify-end pt-0.5">
                                             <button type="button" className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors">
                                                 Forgot password?
                                             </button>
-                                        </div>
+                                        </div> */}
                                     </div>
 
                                     <AnimatePresence>
@@ -247,14 +275,14 @@ export default function Auth() {
                                         <div className="space-y-1.5">
                                             <label className="text-sm font-bold text-slate-700 ml-1">Full Name</label>
                                             <div className="relative">
-                                                <User className="absolute left-4.5 top-1/2 -translate-y-1/2 text-slate-400 w-4.5 h-4.5" />
+                                                <User className="absolute left-4.5 top-1/2 -translate-y-1/2 text-slate-400 w-4.5 h-4.5 z-20" />
                                                 <input
                                                     type="text"
                                                     required
                                                     value={registerData.full_name}
                                                     onChange={(e) => setRegisterData({ ...registerData, full_name: e.target.value })}
                                                     className="w-full bg-[#f8fafc] border border-slate-100 rounded-xl py-3 pl-11 pr-5 text-[#0f172a] font-medium placeholder:text-slate-300 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all shadow-sm text-base"
-                                                    placeholder="John Doe"
+                                                    placeholder="Enter your full name"
                                                 />
                                             </div>
                                         </div>
@@ -262,14 +290,15 @@ export default function Auth() {
                                         <div className="space-y-1.5">
                                             <label className="text-sm font-bold text-slate-700 ml-1">Email Address</label>
                                             <div className="relative">
-                                                <Mail className="absolute left-4.5 top-1/2 -translate-y-1/2 text-slate-400 w-4.5 h-4.5" />
+                                                <Mail className="absolute left-4.5 top-1/2 -translate-y-1/2 text-slate-400 w-4.5 h-4.5 z-20" />
                                                 <input
                                                     type="email"
                                                     required
                                                     value={registerData.email}
                                                     onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
+                                                    autoComplete="off"
                                                     className="w-full bg-[#f8fafc] border border-slate-100 rounded-xl py-3 pl-11 pr-5 text-[#0f172a] font-medium placeholder:text-slate-300 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all shadow-sm text-base"
-                                                    placeholder="admin@hospital.com"
+                                                    placeholder="Enter your email"
                                                 />
                                             </div>
                                         </div>
@@ -277,36 +306,44 @@ export default function Auth() {
                                         <div className="space-y-1.5">
                                             <label className="text-sm font-bold text-slate-700 ml-1">License Key</label>
                                             <div className="relative">
-                                                <Building2 className="absolute left-4.5 top-1/2 -translate-y-1/2 text-slate-400 w-4.5 h-4.5" />
+                                                <Building2 className="absolute left-4.5 top-1/2 -translate-y-1/2 text-slate-400 w-4.5 h-4.5 z-20" />
                                                 <input
-                                                    type="text"
+                                                    type={license_key ? "text" : "password"}
                                                     required
                                                     value={registerData.license_key}
                                                     onChange={(e) => setRegisterData({ ...registerData, license_key: e.target.value })}
                                                     className="w-full bg-[#f8fafc] border border-slate-100 rounded-xl py-3 pl-11 pr-5 text-[#0f172a] font-medium placeholder:text-slate-300 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all shadow-sm uppercase tracking-wider text-base"
                                                     placeholder="XXXX-XXXX-XXXX"
                                                 />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setLicenseKey(!license_key)}
+                                                    className="absolute right-4.5 top-1/2 -translate-y-1/2 text-slate-400"
+                                                >
+                                                    {license_key ? <Eye size={18} /> : <EyeOff size={18} />}
+                                                </button>
                                             </div>
                                         </div>
 
                                         <div className="space-y-1.5">
                                             <label className="text-sm font-bold text-slate-700 ml-1">Password</label>
                                             <div className="relative">
-                                                <Lock className="absolute left-4.5 top-1/2 -translate-y-1/2 text-slate-400 w-4.5 h-4.5" />
+                                                <Lock className="absolute left-4.5 top-1/2 -translate-y-1/2 text-slate-400 w-4.5 h-4.5 z-20" />
                                                 <input
                                                     type={showPassword ? 'text' : 'password'}
                                                     required
                                                     value={registerData.password}
                                                     onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
+                                                    autoComplete="new-password"
                                                     className="w-full bg-[#f8fafc] border border-slate-100 rounded-xl py-3 pl-11 pr-11 text-[#0f172a] font-medium placeholder:text-slate-300 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all shadow-sm text-base"
-                                                    placeholder="••••••••"
+                                                    placeholder="Enter your password"
                                                 />
                                                 <button
                                                     type="button"
                                                     onClick={() => setShowPassword(!showPassword)}
                                                     className="absolute right-4.5 top-1/2 -translate-y-1/2 text-slate-400"
                                                 >
-                                                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                                    {showPassword ? <Eye size={18} /> : <EyeOff size={18} />}
                                                 </button>
                                             </div>
                                         </div>
@@ -339,13 +376,6 @@ export default function Auth() {
                             </motion.div>
                         )}
                     </AnimatePresence>
-
-                    {/* Tiny Footer */}
-                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-full text-center lg:px-20">
-                        <p className="text-[10px] text-slate-300 font-black uppercase tracking-[0.2em]">
-                            Trusted by leading clinics globally • Built for efficiency
-                        </p>
-                    </div>
                 </div>
             </div>
 

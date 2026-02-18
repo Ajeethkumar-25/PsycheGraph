@@ -19,6 +19,7 @@ import DoctorPatients from './pages/doctor/Patients';
 import DoctorAppointments from './pages/doctor/Appointments';
 import DoctorSessionMode from './pages/doctor/SessionMode';
 import Layout from './layouts/Layout';
+import Login from './commenlogin/Login';
 
 function App() {
     const { token, user } = useSelector((state) => state.auth);
@@ -28,7 +29,7 @@ function App() {
             <Routes>
                 <Route path="/admin" element={
                     !token ? (
-                        <Auth />
+                        <Login allowedRoles={['SUPER_ADMIN']} portalTitle="Clinical Operations Portal" />
                     ) : (
                         (user?.role || user?.user?.role)?.toUpperCase() === 'SUPER_ADMIN' ? <Navigate to="/superadmin" /> : <Navigate to="/" />
                     )
