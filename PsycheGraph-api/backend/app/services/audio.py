@@ -1,43 +1,74 @@
 import os
 import time
-import asyncio
 import logging
 import shutil
-import traceback
 import mimetypes
-from typing import List, Tuple, Dict
+import tempfile
+from typing import List, Tuple, Dict, Optional
 
 import numpy as np
 import librosa
 import soundfile as sf
 from pydub import AudioSegment
 
+import sounddevice as sd
+import scipy.io.wavfile as wav
+
 from fastapi import UploadFile, HTTPException
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, OpenAI
+from dotenv import load_dotenv
+
+# Load .env explicitly
+base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+env_path = os.path.join(base_dir, ".env")
+load_dotenv(env_path)
 
 # -------------------------------------------------
 # CONFIG
 # -------------------------------------------------
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-# We will handle the missing key more gracefully in the endpoint or startup if needed,
-# but for now, we keep the user's logic which raises RuntimeError at module level.
-# Ideally this should be checked at startup or usage time to allow other parts of app to run.
-if not OPENAI_API_KEY:
-    # Creating a logger to warn instead of crashing immediately on import if env not set yet
-    logging.warning("OPENAI_API_KEY is not set. Audio processing will fail.")
 
-client = None
-if OPENAI_API_KEY:
-    client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+async_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+sync_client = OpenAI(api_key=OPENAI_API_KEY)
 
-MAX_CHUNK_DURATION = 30  # seconds
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TEMP_DIR = os.path.join(BASE_DIR, "temp_audio")
+TEMP_DIR = "temp_audio"
+TRANSCRIPT_DIR = "transcripts"
+
 os.makedirs(TEMP_DIR, exist_ok=True)
+os.makedirs(TRANSCRIPT_DIR, exist_ok=True)
 
 logger = logging.getLogger("audio-processor")
 logging.basicConfig(level=logging.INFO)
+
+MAX_CHUNK_DURATION = 30
+
+# -------------------------------------------------
+# SUPPORTED LANGUAGES
+# Whisper ISO 639-1 language codes
+# -------------------------------------------------
+SUPPORTED_LANGUAGES = {
+    "en": "English",
+    "ta": "Tamil",
+    "hi": "Hindi",
+    "te": "Telugu",
+    "kn": "Kannada",
+    "ml": "Malayalam",
+    "mr": "Marathi",
+    "bn": "Bengali",
+    "gu": "Gujarati",
+    "pa": "Punjabi",
+    "ur": "Urdu",
+    "ar": "Arabic",
+    "fr": "French",
+    "de": "German",
+    "es": "Spanish",
+    "zh": "Chinese",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "pt": "Portuguese",
+    "ru": "Russian",
+}
 
 
 # -------------------------------------------------
@@ -45,9 +76,8 @@ logging.basicConfig(level=logging.INFO)
 # -------------------------------------------------
 class AudioProcessor:
 
-    AUDIO_EXTENSIONS = (".wav", ".mp3", ".m4a", ".aac", ".ogg", ".flac")
+    AUDIO_EXTENSIONS = (".wav", ".mp3", ".m4a", ".aac", ".ogg", ".flac", ".mp4", ".webm")
 
-    # ---------- Validation ----------
     @staticmethod
     def is_audio_file(filename: str) -> bool:
         mime, _ = mimetypes.guess_type(filename)
@@ -56,7 +86,6 @@ class AudioProcessor:
             or (mime and mime.startswith("audio"))
         )
 
-    # ---------- Save Upload ----------
     @staticmethod
     def save_upload(file: UploadFile) -> str:
         path = os.path.join(TEMP_DIR, f"{int(time.time())}_{file.filename}")
@@ -64,23 +93,15 @@ class AudioProcessor:
             shutil.copyfileobj(file.file, f)
         return path
 
-    # ---------- Convert ----------
     @staticmethod
     def convert_to_wav(path: str) -> str:
-        if path.lower().endswith(".wav"):
+        if path.endswith(".wav"):
             return path
-
         wav_path = f"{path}.wav"
-        try:
-            audio = AudioSegment.from_file(path)
-            audio.export(wav_path, format="wav")
-            return wav_path
-        except Exception:
-            y, sr = librosa.load(path, sr=16000, mono=True)
-            sf.write(wav_path, y, sr)
-            return wav_path
+        audio = AudioSegment.from_file(path)
+        audio.export(wav_path, format="wav")
+        return wav_path
 
-    # ---------- Load ----------
     @staticmethod
     def load_audio(path: str) -> Tuple[np.ndarray, int]:
         try:
@@ -91,20 +112,6 @@ class AudioProcessor:
         except Exception:
             return librosa.load(path, sr=16000, mono=True)
 
-    # ---------- Preprocess ----------
-    @staticmethod
-    def preprocess(path: str) -> str:
-        y, sr = AudioProcessor.load_audio(path)
-        y, _ = librosa.effects.trim(y, top_db=30)
-
-        if np.max(np.abs(y)) > 0:
-            y = y * (0.9 / np.max(np.abs(y)))
-
-        out_path = f"{path}_clean.wav"
-        sf.write(out_path, y, sr)
-        return out_path
-
-    # ---------- Split ----------
     @staticmethod
     def split_audio(path: str) -> List[str]:
         y, sr = AudioProcessor.load_audio(path)
@@ -118,7 +125,7 @@ class AudioProcessor:
 
         for i in range(0, len(y), chunk_size):
             chunk = y[i:i + chunk_size]
-            chunk_path = f"{path}_chunk_{i//chunk_size}.wav"
+            chunk_path = f"{path}_chunk_{i}.wav"
             sf.write(chunk_path, chunk, sr)
             chunks.append(chunk_path)
 
@@ -126,95 +133,200 @@ class AudioProcessor:
 
 
 # -------------------------------------------------
-# TRANSCRIPTION
+# TRANSCRIPTION — with language support
 # -------------------------------------------------
-async def transcribe_audio(path: str) -> str:
+async def transcribe_audio(path: str, language: Optional[str] = None) -> str:
+    """
+    Transcribe audio using Whisper.
+
+    language: ISO 639-1 code e.g. 'en', 'ta', 'hi'
+              Pass None to let Whisper auto-detect the language.
+    """
     try:
+        if language and language not in SUPPORTED_LANGUAGES:
+            logger.warning(f"Unknown language code '{language}', falling back to auto-detect")
+            language = None
+
         with open(path, "rb") as audio:
-            result = await client.audio.transcriptions.create(
-                file=audio,
-                model="whisper-1",
-                language="en",
-                prompt="Medical conversation transcription",
-                response_format="text",
-            )
-        return result.strip()
+            params = {
+                "file": audio,
+                "model": "whisper-1",
+                "prompt": "Medical consultation between a doctor and a patient.",
+            }
+
+            # Only pass language if specified — None means auto-detect
+            if language:
+                params["language"] = language
+
+            result = await async_client.audio.transcriptions.create(**params)
+
+        return result.text
+
     except Exception as e:
-        logger.error(f"Transcription failed: {e}")
+        logger.error(f"Whisper transcription error: {e}")
         return ""
 
 
 # -------------------------------------------------
-# MEDICAL SUMMARIZER
+# FORMAT TRANSCRIPT
 # -------------------------------------------------
-class MedicalSummarizer:
-
-    @staticmethod
-    async def summarize(text: str) -> str:
-        if len(text.split()) < 20:
-            return "Insufficient data for medical summary."
-
-        response = await client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a doctor. Summarize this medical conversation:\n"
-                        "Patient reports:\nDoctor recommends:"
-                    )
-                },
-                {"role": "user", "content": text}
-            ],
-            temperature=0.2,
-            max_tokens=300
-        )
-        return response.choices[0].message.content.strip()
+def format_transcript(text: str, language_name: str = "Auto-detected") -> str:
+    now = time.strftime("%Y-%m-%d %H:%M:%S")
+    lines = [
+        "=" * 50,
+        "     MEDICAL APPOINTMENT TRANSCRIPT",
+        "=" * 50,
+        f"Date     : {now}",
+        f"Language : {language_name}",
+        "=" * 50,
+        "",
+        text,
+        "",
+        "=" * 50,
+        "          END OF TRANSCRIPT",
+        "=" * 50,
+    ]
+    return "\n".join(lines)
 
 
 # -------------------------------------------------
-# FULL PIPELINE
+# SAVE TEXT FILE
 # -------------------------------------------------
-async def process_audio_file(file: UploadFile) -> Dict:
+def save_transcript(text: str, prefix="meeting") -> str:
+    filename = f"{prefix}_{int(time.time())}.txt"
+    path = os.path.join(TRANSCRIPT_DIR, filename)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+    return path
+
+
+# -------------------------------------------------
+# MAIN PIPELINE — called by sessions.py
+# -------------------------------------------------
+async def process_audio_file(
+    file: UploadFile,
+    language: Optional[str] = None
+) -> Dict:
+    """
+    Full pipeline:
+    1. Save uploaded audio
+    2. Convert to WAV
+    3. Split into chunks if long
+    4. Transcribe each chunk with Whisper (in specified language)
+    5. Save transcript to file
+    6. Return result
+
+    language: ISO 639-1 code e.g. 'en', 'ta', 'hi', 'ar'
+              None = Whisper auto-detects language
+    """
+
     if not AudioProcessor.is_audio_file(file.filename):
         raise HTTPException(400, "Unsupported audio format")
 
-    original_path = AudioProcessor.save_upload(file)
-    wav_path = AudioProcessor.convert_to_wav(original_path)
+    language_name = SUPPORTED_LANGUAGES.get(language, "Auto-detected") if language else "Auto-detected"
+    logger.info(f"Processing audio — Language: {language_name} (code: {language or 'auto'})")
 
-    chunks = AudioProcessor.split_audio(wav_path)
-    texts = []
-    temp_files = [] # Track temp files for cleanup
+    # Save and convert
+    original = AudioProcessor.save_upload(file)
 
     try:
-        for chunk in chunks:
-            clean = AudioProcessor.preprocess(chunk)
-            temp_files.append(clean)
-            text = await transcribe_audio(clean)
+        wav_path = AudioProcessor.convert_to_wav(original)
+    except Exception as e:
+        logger.error(f"Conversion error: {e}")
+        wav_path = original
+
+    # Split and transcribe
+    chunks = AudioProcessor.split_audio(wav_path)
+    texts = []
+
+    for chunk in chunks:
+        text = await transcribe_audio(chunk, language=language)
+        if text:
             texts.append(text)
+        logger.info(f"Chunk transcribed: {chunk}")
 
-        full_text = " ".join(texts)
-        summary = await MedicalSummarizer.summarize(full_text)
+    full_text = " ".join(texts)
+    formatted = format_transcript(full_text, language_name)
 
-        return {
-            "english_translation": full_text,
-            "summary": summary,
-            "status": "success"
+    # Save transcript file
+    transcript_file = save_transcript(formatted, "appointment")
+
+    # Cleanup temp files
+    try:
+        if os.path.exists(original):
+            os.remove(original)
+        if wav_path != original and os.path.exists(wav_path):
+            os.remove(wav_path)
+        for chunk in chunks:
+            if chunk != wav_path and os.path.exists(chunk):
+                os.remove(chunk)
+    except Exception as e:
+        logger.warning(f"Cleanup warning: {e}")
+
+    logger.info(f"Transcript complete — Language: {language_name}, File: {transcript_file}")
+
+    return {
+        "transcript": full_text,
+        "english_translation": formatted,
+        "summary": formatted,
+        "file": transcript_file,
+        "language": language_name
+    }
+
+
+# -------------------------------------------------
+# SUPPORTED LANGUAGES HELPER — for API endpoint
+# -------------------------------------------------
+def get_supported_languages() -> Dict:
+    return SUPPORTED_LANGUAGES
+
+
+# -------------------------------------------------
+# LIVE AUDIO TRANSCRIPTION (MICROPHONE)
+# -------------------------------------------------
+SAMPLE_RATE = 16000
+DURATION = 10
+
+
+def record_chunk():
+    print("Recording live audio...")
+    audio = sd.rec(
+        int(DURATION * SAMPLE_RATE),
+        samplerate=SAMPLE_RATE,
+        channels=1
+    )
+    sd.wait()
+    temp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    wav.write(temp_file.name, SAMPLE_RATE, audio)
+    return temp_file.name
+
+
+def transcribe_live(file_path, language: Optional[str] = None):
+    with open(file_path, "rb") as f:
+        params = {
+            "file": f,
+            "model": "whisper-1",
         }
+        if language:
+            params["language"] = language
+        result = sync_client.audio.transcriptions.create(**params)
+    return result.text
 
-    finally:
-        # Cleanup specific files
+
+def start_live_transcription(language: Optional[str] = None):
+    txt_path = os.path.join(TRANSCRIPT_DIR, f"live_{int(time.time())}.txt")
+    language_name = SUPPORTED_LANGUAGES.get(language, "Auto-detected") if language else "Auto-detected"
+
+    print(f"Live transcription started in {language_name}...")
+    print("Saving to:", txt_path)
+
+    while True:
         try:
-            if os.path.exists(original_path):
-                os.remove(original_path)
-            if os.path.exists(wav_path):
-                os.remove(wav_path)
-            for chunk in chunks:
-                if os.path.exists(chunk):
-                    os.remove(chunk)
-            for temp_f in temp_files:
-                if os.path.exists(temp_f):
-                    os.remove(temp_f)
-        except Exception as e:
-            logger.warning(f"Error cleaning up temp files: {e}")
-
+            audio_file = record_chunk()
+            text = transcribe_live(audio_file, language=language)
+            print("Text:", text)
+            with open(txt_path, "a", encoding="utf-8") as f:
+                f.write(text + "\n")
+        except KeyboardInterrupt:
+            print("Stopped live transcription")
+            break
