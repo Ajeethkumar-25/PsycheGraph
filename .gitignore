@@ -37,9 +37,3 @@ node_modules/
 dist/
 dist-ssr/
 *.local
-
-# Sensitive credentials - DO NOT COMMIT
-credentials.json
-token.json
-google_meeting.json
-google_console_cred.json
