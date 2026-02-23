@@ -29,3 +29,5 @@ Base = declarative_base()
 async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
+
+print("DATABASE_URL:", DATABASE_URL)
