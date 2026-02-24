@@ -1,12 +1,15 @@
 import os
 import datetime
 import time
+import logging
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
+logger = logging.getLogger("google_calendar")
 
 # Google Calendar scope
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
@@ -35,20 +38,20 @@ class GoogleCalendarService:
         # Refresh token if expired
         if self.creds and self.creds.expired and self.creds.refresh_token:
             try:
-                print("Refreshing Google token...")
+                logger.info("Refreshing Google token...")
                 self.creds.refresh(Request())
                 # Save the refreshed token
                 with open(TOKEN_PATH, "w") as token:
                     token.write(self.creds.to_json())
-                print("Token refreshed and saved successfully.")
+                logger.info("Token refreshed and saved successfully.")
             except Exception as e:
-                print("Token refresh failed:", e)
+                logger.error(f"Token refresh failed: {e}")
                 self.creds = None
 
         # If no valid credentials → login
         if not self.creds or not self.creds.valid:
             if not os.path.exists(CREDENTIALS_PATH):
-                print("ERROR: credentials.json not found")
+                logger.error(f"CRITICAL ERROR: credentials.json not found at {CREDENTIALS_PATH}. Google Calendar will NOT work on this server.")
                 return
 
             flow = InstalledAppFlow.from_client_secrets_file(
@@ -100,15 +103,19 @@ class GoogleCalendarService:
         if not self.creds or not self.creds.valid:
             if self.creds and self.creds.expired and self.creds.refresh_token:
                 try:
-                    print("Refreshing token before event creation...")
+                    logger.info("Refreshing token before event creation...")
                     self.creds.refresh(Request())
                     with open(TOKEN_PATH, "w") as token:
                         token.write(self.creds.to_json())
                 except Exception as e:
-                    print(f"Failed to refresh token: {e}")
+                    logger.error(f"Failed to refresh token: {e}")
                     return None
             else:
-                print("Credentials are not valid or missing completely")
+                logger.error("Credentials are not valid or missing completely. Cannot create event.")
+                if not os.path.exists(CREDENTIALS_PATH):
+                    logger.error(f"Missing {CREDENTIALS_PATH}")
+                if not os.path.exists(TOKEN_PATH):
+                    logger.error(f"Missing {TOKEN_PATH}")
                 return None
 
         # Ensure UTC timezone
@@ -152,17 +159,16 @@ class GoogleCalendarService:
         }
 
         try:
-            print("Creating Google event via raw HTTP POST...")
+            logger.info("Creating Google event via raw HTTP POST...")
             response = requests.post(url, headers=headers, data=json.dumps(event_body))
             
             if response.status_code != 200:
-                print("Google Calendar API ERROR")
-                print("Status:", response.status_code)
-                print("Content:", response.text)
+                logger.error(f"Google Calendar API ERROR: Status {response.status_code}")
+                logger.error(f"Response Content: {response.text}")
                 return None
 
             event = response.json()
-            print("Initial Google event response ID:", event.get("id"))
+            logger.info(f"Initial Google event response ID: {event.get('id')}")
 
             meet_link = None
 
@@ -188,11 +194,14 @@ class GoogleCalendarService:
                 time.sleep(1)
 
             if not meet_link:
-                print("WARNING: Meet link not generated")
-
-            print("Meet link created:", meet_link)
+                logger.warning("Meet link not generated after polling")
+            else:
+                logger.info(f"Meet link created successfully: {meet_link}")
+            
             return meet_link
 
         except Exception as e:
-            print("Unknown calendar error:", e)
+            logger.error(f"Unknown calendar error during create_event: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return None
