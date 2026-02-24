@@ -2,6 +2,7 @@ import os
 import datetime
 import time
 import logging
+from pathlib import Path
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -14,9 +15,10 @@ logger = logging.getLogger("google_calendar")
 # Google Calendar scope
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
-TOKEN_PATH = os.path.join(BASE_DIR, "token.json")
+# Robust path resolution
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+CREDENTIALS_PATH = BASE_DIR / "credentials.json"
+TOKEN_PATH = BASE_DIR / "token.json"
 
 
 class GoogleCalendarService:
@@ -27,13 +29,22 @@ class GoogleCalendarService:
 
     def _authenticate(self):
         """Authenticate with Google Calendar API"""
+        logger.info(f"Checking for Google credentials. BASE_DIR resolved to: {BASE_DIR}")
+        logger.info(f"Looking for token at: {TOKEN_PATH.absolute()}")
+        logger.info(f"Looking for credentials at: {CREDENTIALS_PATH.absolute()}")
 
         # Load existing token
-        if os.path.exists(TOKEN_PATH):
-            self.creds = Credentials.from_authorized_user_file(
-                TOKEN_PATH,
-                SCOPES
-            )
+        if TOKEN_PATH.exists():
+            try:
+                self.creds = Credentials.from_authorized_user_file(
+                    str(TOKEN_PATH),
+                    SCOPES
+                )
+                logger.info("Existing token.json loaded successfully.")
+            except Exception as e:
+                logger.error(f"Failed to load existing token.json: {e}")
+        else:
+            logger.warning(f"token.json NOT FOUND at {TOKEN_PATH}")
 
         # Refresh token if expired
         if self.creds and self.creds.expired and self.creds.refresh_token:
@@ -50,27 +61,33 @@ class GoogleCalendarService:
 
         # If no valid credentials → login
         if not self.creds or not self.creds.valid:
-            if not os.path.exists(CREDENTIALS_PATH):
-                logger.error(f"CRITICAL ERROR: credentials.json not found at {CREDENTIALS_PATH}. Google Calendar will NOT work on this server.")
+            if not CREDENTIALS_PATH.exists():
+                logger.error(f"CRITICAL ERROR: credentials.json not found at {CREDENTIALS_PATH.absolute()}. Google Calendar will NOT work on this server.")
                 return
 
-            flow = InstalledAppFlow.from_client_secrets_file(
-                CREDENTIALS_PATH,
-                SCOPES
-            )
+            logger.warning("No valid credentials/token. Attempting to start interactive login flow...")
+            
+            try:
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    str(CREDENTIALS_PATH),
+                    SCOPES
+                )
 
-            print("Login required for Google Calendar...")
+                # FIX 1 — force refresh token generation
+                # NOTE: This will fail on headless Linux servers if no GUI is available.
+                self.creds = flow.run_local_server(
+                    port=0,
+                    access_type="offline",
+                    prompt="consent"
+                )
 
-            # FIX 1 — force refresh token generation
-            self.creds = flow.run_local_server(
-                port=0,
-                access_type="offline",
-                prompt="consent"
-            )
-
-            # Save token
-            with open(TOKEN_PATH, "w") as token:
-                token.write(self.creds.to_json())
+                # Save token
+                with open(TOKEN_PATH, "w") as token:
+                    token.write(self.creds.to_json())
+                logger.info(f"New token generated and saved to {TOKEN_PATH}")
+            except Exception as e:
+                logger.error(f"Interactive login flow failed: {e}")
+                logger.error("On a remote server, you MUST manually upload a valid token.json from your local machine.")
 
         # Build service
         try:
