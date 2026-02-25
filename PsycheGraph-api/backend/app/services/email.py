@@ -56,5 +56,4 @@ PsycheGraph Team
             server.sendmail(FROM_EMAIL, to_email, msg.as_string())
         print(f"[EMAIL SENT] License key sent to {to_email}")
     except Exception as e:
-        print(f"[EMAIL ERROR] Failed to send email to {to_email}: {e}")
-        raise
+        print(f"[WARNING] Email sending failed: {e}")

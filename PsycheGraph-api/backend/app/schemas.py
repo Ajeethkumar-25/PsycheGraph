@@ -76,13 +76,14 @@ class OrganizationBase(BaseModel):
 class OrganizationCreate(BaseModel):
     name: str
     email: EmailStr
+    license_key: str
 
 class OrganizationOut(OrganizationBase):
     id: int
     name: str
-    email: EmailStr
+    email: Optional[str] = None 
     license_key: Optional[str] = None
-    is_approved: bool
+    is_approved: Optional[bool] = False   
     is_active: bool
     created_at: datetime
     
@@ -91,13 +92,6 @@ class OrganizationOut(OrganizationBase):
         json_encoders = {
             datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S")
         }
-
-class OrganizationApproveIn(BaseModel):
-    license_key: str   # ← super admin manually enters this
-
-
-class OrganizationApproveOut(OrganizationOut):
-    message: str = "License key generated and sent to registered email"
 
 
 class PatientBase(BaseModel):
