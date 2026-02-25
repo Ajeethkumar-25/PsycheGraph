@@ -9,6 +9,14 @@ export const fetchPatients = createAsyncThunk('patients/fetchAll', async (_, { r
     }
 });
 
+export const fetchPatientById = createAsyncThunk('patients/fetchById', async (id, { rejectWithValue }) => {
+    try {
+        return await PatientService.fetchPatientById(id);
+    } catch (error) {
+        return rejectWithValue(error.response?.data?.detail || 'Failed to fetch patient details');
+    }
+});
+
 export const createPatient = createAsyncThunk('patients/create', async (patientData, { rejectWithValue }) => {
     try {
         return await PatientService.createPatient(patientData);
@@ -45,6 +53,9 @@ const patientSlice = createSlice({
         setCurrentPatient: (state, action) => {
             state.currentPatient = action.payload;
         },
+        clearSelectedPatient: (state) => {
+            state.currentPatient = null;
+        },
         clearError: (state) => {
             state.error = null;
         }
@@ -54,6 +65,10 @@ const patientSlice = createSlice({
             .addCase(fetchPatients.pending, (state) => { state.loading = true; state.error = null; })
             .addCase(fetchPatients.fulfilled, (state, action) => { state.loading = false; state.list = action.payload; })
             .addCase(fetchPatients.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
+
+            .addCase(fetchPatientById.pending, (state) => { state.loading = true; state.error = null; })
+            .addCase(fetchPatientById.fulfilled, (state, action) => { state.loading = false; state.currentPatient = action.payload; })
+            .addCase(fetchPatientById.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
 
             .addCase(createPatient.pending, (state) => { state.loading = true; state.error = null; })
             .addCase(createPatient.fulfilled, (state, action) => { state.loading = false; state.list.unshift(action.payload); })
@@ -65,11 +80,18 @@ const patientSlice = createSlice({
                 if (state.currentPatient?.id === action.payload.id) state.currentPatient = action.payload;
             })
             .addCase(deletePatient.fulfilled, (state, action) => {
-                state.list = state.list.filter(p => p.id !== action.payload);
-                if (state.currentPatient?.id === action.payload) state.currentPatient = null;
+                state.loading = false;
+                state.list = state.list.filter(p => String(p.id) !== String(action.payload));
+                if (state.currentPatient && String(state.currentPatient.id) === String(action.payload)) {
+                    state.currentPatient = null;
+                }
+            })
+            .addCase(deletePatient.rejected, (state, action) => {
+                state.loading = false;
+                state.error = action.payload;
             });
     },
 });
 
-export const { setCurrentPatient, clearError } = patientSlice.actions;
+export const { setCurrentPatient, clearSelectedPatient, clearError } = patientSlice.actions;
 export default patientSlice.reducer;

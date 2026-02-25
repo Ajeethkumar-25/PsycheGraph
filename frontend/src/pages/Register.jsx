@@ -176,7 +176,7 @@ export default function Register() {
                                         <input
                                             required
                                             type="text"
-                                            placeholder="John Doe"
+                                            placeholder="Enter Full Name"
                                             className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3.5 pl-12 pr-4 text-slate-900 font-medium placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                                             value={formData.full_name}
                                             onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}

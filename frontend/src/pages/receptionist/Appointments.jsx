@@ -13,17 +13,22 @@ function cn(...inputs) {
 }
 
 // Helper for Time Slot
-function TimeSlotButton({ time, selectedTime, onClick }) {
+function TimeSlotButton({ time, selectedTime, onClick, isBooked }) {
     const isSelected = selectedTime === time;
     return (
         <button
-            onClick={() => onClick(time)}
+            type="button"
+            onClick={() => !isBooked && onClick(time)}
+            disabled={isBooked}
             className={cn(
                 "px-2 py-2.5 rounded-xl text-sm font-bold border transition-all relative overflow-hidden",
-                isSelected
-                    ? "bg-primary-600 text-white border-primary-600 shadow-md transform scale-105 z-10"
-                    : "bg-white text-slate-600 border-slate-200 hover:border-primary-300 hover:bg-slate-50"
+                isBooked
+                    ? "bg-slate-100/60 text-slate-400 border-slate-200 opacity-60 cursor-not-allowed"
+                    : isSelected
+                        ? "bg-primary-600 text-white border-primary-600 shadow-md transform scale-105 z-10"
+                        : "bg-white text-slate-600 border-slate-200 hover:border-primary-300 hover:bg-slate-50"
             )}
+            title={isBooked ? "Slot Already Booked" : ""}
         >
             {time}
         </button>
@@ -98,6 +103,10 @@ export default function ReceptionistAppointments() {
         meet_link: ''
     });
 
+    // Pagination State
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 6;
+
     useEffect(() => {
         dispatch(fetchAppointments());
         dispatch(fetchPatients());
@@ -108,10 +117,9 @@ export default function ReceptionistAppointments() {
     }, [dispatch, currentUser?.role]);
 
     useEffect(() => {
-        // Generate next 14 days
+        // Generate next 30 days
         const dates = [];
         const today = new Date();
-        // Generate next 30 days to allow booking for next month
         for (let i = 0; i < 30; i++) {
             const d = new Date(today);
             d.setDate(today.getDate() + i);
@@ -119,7 +127,7 @@ export default function ReceptionistAppointments() {
                 dateObj: d,
                 dayName: d.toLocaleDateString('en-US', { weekday: 'short' }),
                 dayNumber: d.getDate(),
-                fullDate: d.toISOString().split('T')[0],
+                fullDate: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
                 month: d.toLocaleDateString('en-US', { month: 'short' })
             });
         }
@@ -129,6 +137,11 @@ export default function ReceptionistAppointments() {
             setFormData(prev => ({ ...prev, date: dates[0].fullDate }));
         }
     }, []);
+
+    // Reset time when date changes
+    useEffect(() => {
+        setFormData(prev => ({ ...prev, time: '' }));
+    }, [formData.date]);
 
     useEffect(() => {
         if (isModalOpen && assignedDoctorId && !formData.doctor_id) {
@@ -146,33 +159,72 @@ export default function ReceptionistAppointments() {
         }
     }, [formData.doctor_id, displayDoctors]);
 
-    // Generate time slots grouped by period
-    const generateTimeSlots = () => {
+    // Track booked slots for selected doctor on the selected date
+    const bookedTimeSlots = useMemo(() => {
+        if (!formData.date || !formData.doctor_id) return new Set();
+
+        const booked = new Set();
+        appointments.forEach(app => {
+            if (String(app.doctor_id) !== String(formData.doctor_id)) return;
+            if (app.status === 'CANCELLED') return;
+
+            const appDate = new Date(app.start_time);
+            // Convert start_time to local YYYY-MM-DD to match formData.date
+            const localDateStr = `${appDate.getFullYear()}-${String(appDate.getMonth() + 1).padStart(2, '0')}-${String(appDate.getDate()).padStart(2, '0')}`;
+
+            if (localDateStr === formData.date) {
+                const hours = appDate.getHours().toString().padStart(2, '0');
+                const minutes = appDate.getMinutes().toString().padStart(2, '0');
+                booked.add(`${hours}:${minutes}`);
+            }
+        });
+        return booked;
+    }, [appointments, formData.date, formData.doctor_id]);
+
+    // Dynamic time slots reactive to selected date and current time
+    const timeSlots = useMemo(() => {
         const morning = [];
         const afternoon = [];
         const evening = [];
 
-        // Mock generation
+        const now = new Date();
+        const localNowStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const isToday = formData.date === localNowStr;
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+
+        const addSlot = (h, m, list) => {
+            const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+            // If it's today, filter out past slots (with 15 min buffer)
+            if (!isToday) {
+                list.push(timeStr);
+            } else {
+                const slotTimeValue = h * 60 + m;
+                const currentTimeValue = currentHour * 60 + currentMinute + 15; // 15 min buffer
+                if (slotTimeValue > currentTimeValue) {
+                    list.push(timeStr);
+                }
+            }
+        };
+
         // Morning: 10:00 - 12:00
         for (let h = 10; h < 12; h++) {
-            morning.push(`${h.toString().padStart(2, '0')}:00`);
-            morning.push(`${h.toString().padStart(2, '0')}:30`);
+            addSlot(h, 0, morning);
+            addSlot(h, 30, morning);
         }
-        // Afternoon: 14:00 - 16:00
+        // Afternoon: 14:00 - 17:00
         for (let h = 14; h < 17; h++) {
-            afternoon.push(`${h.toString().padStart(2, '0')}:00`);
-            afternoon.push(`${h.toString().padStart(2, '0')}:30`);
+            addSlot(h, 0, afternoon);
+            addSlot(h, 30, afternoon);
         }
-        // Evening: 18:00 - 20:00
+        // Evening: 18:00 - 20:30
         for (let h = 18; h < 21; h++) {
-            evening.push(`${h.toString().padStart(2, '0')}:00`);
-            evening.push(`${h.toString().padStart(2, '0')}:30`);
+            addSlot(h, 0, evening);
+            addSlot(h, 30, evening);
         }
 
         return { morning, afternoon, evening };
-    };
-
-    const timeSlots = generateTimeSlots();
+    }, [formData.date]);
 
     const handleNextStep = () => {
         if (step === 1 && formData.patient_id && formData.doctor_id) {
@@ -250,12 +302,6 @@ export default function ReceptionistAppointments() {
 
     return (
         <div className="space-y-6">
-            {/* DEBUG: Temporary User Structure Display
-            <div className="bg-yellow-100 p-4 rounded-lg border border-yellow-300 text-xs font-mono overflow-auto max-h-60">
-                <strong>Debug Info (Please share this):</strong>
-                <pre>{JSON.stringify(currentUser, null, 2)}</pre>
-            </div> */}
-
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                 <motion.div
                     initial={{ opacity: 0, y: -10 }}
@@ -296,61 +342,108 @@ export default function ReceptionistAppointments() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
-                            {appointments.map((app, index) => (
-                                <motion.tr
-                                    key={app.id}
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    transition={{ delay: index * 0.03 }}
-                                    className="hover:bg-slate-50/50 transition-colors group"
-                                >
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="h-10 w-10 bg-indigo-50 rounded-xl flex items-center justify-center shrink-0">
-                                                <CalendarIcon size={16} className="text-indigo-600" />
+                            {(() => {
+                                const indexOfLastItem = currentPage * itemsPerPage;
+                                const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+                                const currentItems = appointments.slice(indexOfFirstItem, indexOfLastItem);
+
+                                return currentItems.map((app, index) => (
+                                    <motion.tr
+                                        key={app.id}
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        transition={{ delay: index * 0.03 }}
+                                        className="hover:bg-slate-50/50 transition-colors group"
+                                    >
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="h-10 w-10 bg-indigo-50 rounded-xl flex items-center justify-center shrink-0">
+                                                    <CalendarIcon size={16} className="text-indigo-600" />
+                                                </div>
+                                                <div>
+                                                    <span className="text-sm font-semibold text-slate-900">
+                                                        {new Date(app.start_time).toLocaleDateString()}
+                                                    </span>
+                                                    <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+                                                        <Clock size={10} />
+                                                        {new Date(app.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <span className="text-sm font-semibold text-slate-900">
-                                                    {new Date(app.start_time).toLocaleDateString()}
-                                                </span>
-                                                <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
-                                                    <Clock size={10} />
-                                                    {new Date(app.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <span className="text-sm font-semibold text-slate-900">{app.patient_name}</span>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <span className="text-sm text-slate-600 flex items-center gap-1.5">
-                                            <Stethoscope size={12} className="text-slate-400" />
-                                            Dr. {app.doctor_name}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <span className={cn(
-                                            "px-2.5 py-1 text-xs font-semibold rounded-lg",
-                                            app.status === 'SCHEDULED' ? 'bg-blue-50 text-blue-600' :
-                                                app.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'
-                                        )}>
-                                            {app.status}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <button
-                                            onClick={() => handleCancel(app.id)}
-                                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                    </td>
-                                </motion.tr>
-                            ))}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="text-sm font-semibold text-slate-900">{app.patient_name}</span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="text-sm text-slate-600 flex items-center gap-1.5">
+                                                <Stethoscope size={12} className="text-slate-400" />
+                                                Dr. {app.doctor_name}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={cn(
+                                                "px-2.5 py-1 text-xs font-semibold rounded-lg",
+                                                app.status === 'SCHEDULED' ? 'bg-blue-50 text-blue-600' :
+                                                    app.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'
+                                            )}>
+                                                {app.status}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <button
+                                                onClick={() => handleCancel(app.id)}
+                                                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </td>
+                                    </motion.tr>
+                                ));
+                            })()}
                         </tbody>
                     </table>
                 </div>
+
+                {/* Pagination Controls */}
+                {appointments.length > itemsPerPage && (
+                    <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/30 flex items-center justify-between">
+                        <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                            Showing {Math.min((currentPage - 1) * itemsPerPage + 1, appointments.length)} to {Math.min(currentPage * itemsPerPage, appointments.length)} of {appointments.length}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                disabled={currentPage === 1}
+                                className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-all"
+                            >
+                                <ChevronLeft size={16} />
+                            </button>
+                            <div className="flex items-center gap-1">
+                                {[...Array(Math.ceil(appointments.length / itemsPerPage))].map((_, i) => (
+                                    <button
+                                        key={i}
+                                        onClick={() => setCurrentPage(i + 1)}
+                                        className={cn(
+                                            "w-8 h-8 rounded-lg text-xs font-bold transition-all",
+                                            currentPage === i + 1
+                                                ? "bg-indigo-600 text-white shadow-md shadow-indigo-200"
+                                                : "bg-white text-slate-600 border border-slate-200 hover:border-indigo-300 hover:text-indigo-600"
+                                        )}
+                                    >
+                                        {i + 1}
+                                    </button>
+                                ))}
+                            </div>
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(appointments.length / itemsPerPage)))}
+                                disabled={currentPage === Math.ceil(appointments.length / itemsPerPage)}
+                                className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-all"
+                            >
+                                <ChevronRight size={16} />
+                            </button>
+                        </div>
+                    </div>
+                )}
                 {appointments.length === 0 && !loading && (
                     <div className="flex flex-col items-center justify-center py-16 text-center">
                         <div className="p-4 rounded-full bg-slate-50 mb-4">
@@ -428,9 +521,7 @@ export default function ReceptionistAppointments() {
                                                 </div>
                                             </div>
 
-                                            {/* Doctor Select */}
-
-                                            {/* Doctor Card Preview */}
+                                            {/* Doctor Card Preview (Assigned Doctor) */}
                                             <AnimatePresence>
                                                 {selectedDoctor && (
                                                     <motion.div
@@ -569,43 +660,57 @@ export default function ReceptionistAppointments() {
                                                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Select Time</label>
 
                                                 {/* Morning */}
-                                                <div>
-                                                    <div className="flex items-center gap-2 mb-2 text-xs font-bold text-slate-400">
-                                                        <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                                                        <span>Morning</span>
+                                                {timeSlots.morning.length > 0 && (
+                                                    <div>
+                                                        <div className="flex items-center gap-2 mb-2 text-xs font-bold text-slate-400">
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                                            <span>Morning</span>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                                            {timeSlots.morning.map(time => (
+                                                                <TimeSlotButton key={time} time={time} selectedTime={formData.time} isBooked={bookedTimeSlots.has(time)} onClick={(t) => setFormData({ ...formData, time: t })} />
+                                                            ))}
+                                                        </div>
                                                     </div>
-                                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                                        {timeSlots.morning.map(time => (
-                                                            <TimeSlotButton key={time} time={time} selectedTime={formData.time} onClick={(t) => setFormData({ ...formData, time: t })} />
-                                                        ))}
-                                                    </div>
-                                                </div>
+                                                )}
 
                                                 {/* Afternoon */}
-                                                <div>
-                                                    <div className="flex items-center gap-2 mb-2 text-xs font-bold text-slate-400">
-                                                        <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                                                        <span>Afternoon</span>
+                                                {timeSlots.afternoon.length > 0 && (
+                                                    <div>
+                                                        <div className="flex items-center gap-2 mb-2 text-xs font-bold text-slate-400">
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+                                                            <span>Afternoon</span>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                                            {timeSlots.afternoon.map(time => (
+                                                                <TimeSlotButton key={time} time={time} selectedTime={formData.time} isBooked={bookedTimeSlots.has(time)} onClick={(t) => setFormData({ ...formData, time: t })} />
+                                                            ))}
+                                                        </div>
                                                     </div>
-                                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                                        {timeSlots.afternoon.map(time => (
-                                                            <TimeSlotButton key={time} time={time} selectedTime={formData.time} onClick={(t) => setFormData({ ...formData, time: t })} />
-                                                        ))}
-                                                    </div>
-                                                </div>
+                                                )}
 
                                                 {/* Evening */}
-                                                <div>
-                                                    <div className="flex items-center gap-2 mb-2 text-xs font-bold text-slate-400">
-                                                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                                                        <span>Evening</span>
+                                                {timeSlots.evening.length > 0 && (
+                                                    <div>
+                                                        <div className="flex items-center gap-2 mb-2 text-xs font-bold text-slate-400">
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                                                            <span>Evening</span>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                                            {timeSlots.evening.map(time => (
+                                                                <TimeSlotButton key={time} time={time} selectedTime={formData.time} isBooked={bookedTimeSlots.has(time)} onClick={(t) => setFormData({ ...formData, time: t })} />
+                                                            ))}
+                                                        </div>
                                                     </div>
-                                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                                        {timeSlots.evening.map(time => (
-                                                            <TimeSlotButton key={time} time={time} selectedTime={formData.time} onClick={(t) => setFormData({ ...formData, time: t })} />
-                                                        ))}
+                                                )}
+
+                                                {/* No Slots Available Fallback */}
+                                                {timeSlots.morning.length === 0 && timeSlots.afternoon.length === 0 && timeSlots.evening.length === 0 && (
+                                                    <div className="py-8 text-center bg-slate-50/50 rounded-xl border border-slate-100 border-dashed">
+                                                        <p className="text-sm font-semibold text-slate-500">No time slots available for this date.</p>
+                                                        <p className="text-xs text-slate-400 mt-1">Please select another date</p>
                                                     </div>
-                                                </div>
+                                                )}
                                             </div>
 
                                             {/* Notes (Optional) */}
@@ -691,9 +796,8 @@ export default function ReceptionistAppointments() {
                             </div>
                         </motion.div>
                     </div>
-                )
-                }
-            </AnimatePresence >
-        </div >
+                )}
+            </AnimatePresence>
+        </div>
     );
 }

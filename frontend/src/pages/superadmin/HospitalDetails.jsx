@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { fetchOrganizations } from '../../store/slices/OrgSlice';
 import { fetchUsers, fetchUserById, clearSelectedUser } from '../../store/slices/AllUserSlice';
-import { fetchPatients } from '../../store/slices/PatientSlice';
+import { fetchPatients, fetchPatientById, clearSelectedPatient } from '../../store/slices/PatientSlice';
 
 const cn = (...classes) => classes.filter(Boolean).join(' ');
 
@@ -29,7 +29,7 @@ export default function HospitalDetails() {
     const navigate = useNavigate();
     const { list: organizations, loading: orgLoading } = useSelector((state) => state.organizations);
     const { list: users, loading: userLoading, selectedUser } = useSelector((state) => state.users);
-    const { list: patients, loading: patLoading } = useSelector((state) => state.patients);
+    const { list: patients, loading: patLoading, currentPatient } = useSelector((state) => state.patients);
 
     const [selectedOrgId, setSelectedOrgId] = useState(null);
     const [activeTab, setActiveTab] = useState('DOCTOR'); // DOCTOR, RECEPTIONIST, PATIENT
@@ -69,13 +69,17 @@ export default function HospitalDetails() {
 
     const currentList = filteredData();
 
-    const handleUserClick = (user) => {
-        if (activeTab === 'PATIENT') return; // Not implemented for patients yet
-        dispatch(fetchUserById({ id: user.id, role: user.role }));
+    const handleUserClick = (item) => {
+        if (activeTab === 'PATIENT') {
+            dispatch(fetchPatientById(item.id));
+        } else {
+            dispatch(fetchUserById({ id: item.id, role: item.role }));
+        }
     };
 
     const closeUserModal = () => {
         dispatch(clearSelectedUser());
+        dispatch(clearSelectedPatient());
     };
 
     const containerVariants = {
@@ -100,7 +104,7 @@ export default function HospitalDetails() {
         >
             {/* User Details Modal */}
             <AnimatePresence>
-                {selectedUser && (
+                {(selectedUser || currentPatient) && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
                         <motion.div
                             initial={{ opacity: 0, scale: 0.95 }}
@@ -118,7 +122,7 @@ export default function HospitalDetails() {
                             <div className="h-24 md:h-32 bg-gradient-to-r from-primary-600 to-purple-600 relative">
                                 <div className="absolute -bottom-12 md:-bottom-16 left-4 md:left-8 p-1 bg-white rounded-2xl md:rounded-3xl">
                                     <div className="h-20 w-20 md:h-28 md:w-28 bg-slate-100 rounded-[1rem] md:rounded-[1.3rem] flex items-center justify-center text-2xl md:text-4xl font-black text-slate-300">
-                                        {(selectedUser.full_name || 'U')[0]}
+                                        {((selectedUser?.full_name || currentPatient?.full_name || 'U'))[0]}
                                     </div>
                                 </div>
                             </div>
@@ -126,21 +130,21 @@ export default function HospitalDetails() {
                             <div className="pt-14 md:pt-20 px-4 md:px-8 pb-4 md:pb-8 space-y-4 md:space-y-6">
                                 <div>
                                     <h2 className="text-2xl md:text-3xl font-black text-slate-900 leading-tight">
-                                        {selectedUser.full_name}
+                                        {selectedUser?.full_name || currentPatient?.full_name}
                                     </h2>
                                     <div className="flex items-center gap-2 mt-2">
                                         <span className="px-3 py-1 bg-primary-50 text-primary-700 text-xs font-black uppercase tracking-widest rounded-full">
-                                            {selectedUser.role}
+                                            {selectedUser ? selectedUser.role : 'PATIENT'}
                                         </span>
                                         <span className={cn(
                                             "px-3 py-1 text-xs font-black uppercase tracking-widest rounded-full flex items-center gap-1",
-                                            selectedUser.is_active !== false ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+                                            (selectedUser || currentPatient)?.is_active !== false ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
                                         )}>
                                             <div className={cn(
                                                 "w-1.5 h-1.5 rounded-full",
-                                                selectedUser.is_active !== false ? "bg-emerald-500 animate-pulse" : "bg-red-500"
+                                                (selectedUser || currentPatient)?.is_active !== false ? "bg-emerald-500 animate-pulse" : "bg-red-500"
                                             )} />
-                                            {selectedUser.is_active !== false ? "Active" : "Inactive"}
+                                            {(selectedUser || currentPatient)?.is_active !== false ? "Active" : "Inactive"}
                                         </span>
                                     </div>
                                 </div>
@@ -152,7 +156,7 @@ export default function HospitalDetails() {
                                         </div>
                                         <div>
                                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email Address</p>
-                                            <p className="font-bold text-slate-700 text-sm md:text-base break-all">{selectedUser.email}</p>
+                                            <p className="font-bold text-slate-700 text-sm md:text-base break-all">{selectedUser?.email || currentPatient?.email || 'N/A'}</p>
                                         </div>
                                     </div>
 
@@ -163,22 +167,52 @@ export default function HospitalDetails() {
                                         <div>
                                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hospital</p>
                                             <p className="font-bold text-slate-700 text-sm md:text-base">
-                                                {organizations.find(o => o.id === selectedUser.organization_id)?.name || 'Unknown Organization'}
+                                                {organizations.find(o => String(o.id) === String(selectedUser?.organization_id || currentPatient?.organization_id))?.name || 'Unknown Hospital'}
                                             </p>
                                         </div>
                                     </div>
 
-                                    <div className="p-3 md:p-4 bg-slate-50 rounded-xl md:rounded-2xl flex items-center gap-3 md:gap-4">
-                                        <div className="p-2 md:p-3 bg-white rounded-lg md:rounded-xl text-slate-400 shadow-sm">
-                                            <Users size={18} className="md:w-5 md:h-5" />
+                                    {selectedUser && (
+                                        <div className="p-3 md:p-4 bg-slate-50 rounded-xl md:rounded-2xl flex items-center gap-3 md:gap-4">
+                                            <div className="p-2 md:p-3 bg-white rounded-lg md:rounded-xl text-slate-400 shadow-sm">
+                                                <Users size={18} className="md:w-5 md:h-5" />
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Assigned Patients</p>
+                                                <p className="font-bold text-slate-700 text-sm md:text-base">
+                                                    {patients.filter(p => String(p.doctor_id) === String(selectedUser.id)).length} Patients
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Assigned Patients</p>
-                                            <p className="font-bold text-slate-700 text-sm md:text-base">
-                                                {patients.filter(p => p.doctor_id === selectedUser.id).length} Patients
-                                            </p>
-                                        </div>
-                                    </div>
+                                    )}
+
+                                    {currentPatient && (
+                                        <>
+                                            <div className="p-3 md:p-4 bg-slate-50 rounded-xl md:rounded-2xl flex items-center gap-3 md:gap-4">
+                                                <div className="p-2 md:p-3 bg-white rounded-lg md:rounded-xl text-slate-400 shadow-sm">
+                                                    <Stethoscope size={18} className="md:w-5 md:h-5" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Assigned Doctor</p>
+                                                    <p className="font-bold text-slate-700 text-sm md:text-base">
+                                                        {users.find(u => String(u.id) === String(currentPatient.doctor_id))?.full_name || 'Unassigned'}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div className="p-3 md:p-4 bg-slate-50 rounded-xl md:rounded-2xl flex items-center gap-3 md:gap-4">
+                                                <div className="p-2 md:p-3 bg-white rounded-lg md:rounded-xl text-slate-400 shadow-sm">
+                                                    <UserCheck size={18} className="md:w-5 md:h-5" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Receptionist</p>
+                                                    <p className="font-bold text-slate-700 text-sm md:text-base">
+                                                        {users.find(u => String(u.id) === String(currentPatient.created_by))?.full_name || 'System Registry'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
 
                                 <div className="pt-4 border-t border-slate-100">
@@ -195,8 +229,8 @@ export default function HospitalDetails() {
             {/* Header */}
             <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-4xl font-black text-slate-900 tracking-tight mb-2">
-                        Hospital <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-600 to-purple-600">Intelligence</span>
+                    <h1 className="text-4xl font-black text-slate-800 tracking-tight mb-2">
+                        Hospital <span className="text-transparent bg-clip-text bg-slate-800">Intelligence</span>
                     </h1>
                     <p className="text-slate-500 font-medium flex items-center gap-2">
                         <Hospital size={18} className="text-primary-500" />

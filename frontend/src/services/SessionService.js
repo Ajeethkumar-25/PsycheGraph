@@ -7,12 +7,22 @@ const SessionService = {
         return response.data;
     },
 
+    fetchLanguages: async () => {
+        const response = await api.get('/sessions/languages');
+        return response.data;
+    },
+
     createSession: async (formData) => {
-        const response = await api.post('/sessions', formData, {
+        const response = await api.post('/sessions/', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data'
             }
         });
+        return response.data;
+    },
+
+    fetchSessionById: async (session_id) => {
+        const response = await api.get(`/sessions/${session_id}`);
         return response.data;
     },
 

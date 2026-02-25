@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Plus, Pencil, Trash2, X, Check, Eye, EyeOff, AlertCircle, Info } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Check, Eye, EyeOff, AlertCircle, Info, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { fetchUsers, createUser, updateUser, deleteUser, clearError } from '../../store/slices/AllUserSlice';
 
@@ -59,6 +59,9 @@ export default function AdminUsers() {
         license_key: '',
         doctor_id: ''
     });
+
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 6;
 
     const showToast = useCallback((message, type = 'success') => {
         setToast({ message, type });
@@ -230,20 +233,28 @@ export default function AdminUsers() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
-                            {users.length === 0 ? (
-                                <tr>
-                                    <td colSpan="4" className="px-6 py-12 text-center">
-                                        <div className="flex flex-col items-center gap-3">
-                                            <div className="p-4 rounded-full bg-slate-50">
-                                                <Info size={28} className="text-slate-300" />
-                                            </div>
-                                            <p className="text-sm font-semibold text-slate-400">No users found</p>
-                                            <p className="text-xs text-slate-400">Click "Add User" to create one</p>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ) : (
-                                users.map((user, index) => (
+                            {(() => {
+                                const indexOfLastItem = currentPage * itemsPerPage;
+                                const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+                                const currentItems = users.slice(indexOfFirstItem, indexOfLastItem);
+
+                                if (users.length === 0) {
+                                    return (
+                                        <tr>
+                                            <td colSpan="4" className="px-6 py-12 text-center">
+                                                <div className="flex flex-col items-center gap-3">
+                                                    <div className="p-4 rounded-full bg-slate-50">
+                                                        <Info size={28} className="text-slate-300" />
+                                                    </div>
+                                                    <p className="text-sm font-semibold text-slate-400">No users found</p>
+                                                    <p className="text-xs text-slate-400">Click "Add User" to create one</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                }
+
+                                return currentItems.map((user, index) => (
                                     <motion.tr
                                         key={user.id}
                                         initial={{ opacity: 0 }}
@@ -295,11 +306,49 @@ export default function AdminUsers() {
                                             </div>
                                         </td>
                                     </motion.tr>
-                                ))
-                            )}
+                                ));
+                            })()}
                         </tbody>
                     </table>
                 </div>
+
+                {users.length > itemsPerPage && (
+                    <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/30 flex items-center justify-between">
+                        <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                            Showing {Math.min((currentPage - 1) * itemsPerPage + 1, users.length)} to {Math.min(currentPage * itemsPerPage, users.length)} of {users.length}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                disabled={currentPage === 1}
+                                className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-all"
+                            >
+                                <ChevronLeft size={16} />
+                            </button>
+                            <div className="flex items-center gap-1">
+                                {[...Array(Math.ceil(users.length / itemsPerPage))].map((_, i) => (
+                                    <button
+                                        key={i}
+                                        onClick={() => setCurrentPage(i + 1)}
+                                        className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${currentPage === i + 1
+                                            ? "bg-blue-600 text-white shadow-md shadow-blue-200"
+                                            : "bg-white text-slate-600 border border-slate-200 hover:border-blue-300 hover:text-blue-600"
+                                            }`}
+                                    >
+                                        {i + 1}
+                                    </button>
+                                ))}
+                            </div>
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(users.length / itemsPerPage)))}
+                                disabled={currentPage === Math.ceil(users.length / itemsPerPage)}
+                                className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-all"
+                            >
+                                <ChevronRight size={16} />
+                            </button>
+                        </div>
+                    </div>
+                )}
             </motion.div>
 
             {/* Modal */}
@@ -342,7 +391,7 @@ export default function AdminUsers() {
                                             value={formData.full_name}
                                             onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                                             className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-bold text-slate-700 placeholder:text-slate-300"
-                                            placeholder="Dr. John Doe"
+                                            placeholder="Enter Full Name"
                                             required
                                         />
                                     </div>

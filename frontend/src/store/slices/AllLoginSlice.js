@@ -93,13 +93,24 @@ const AllLoginSlice = createSlice({
     },
     extraReducers: (builder) => {
         const handleAuthFullfilled = (state, action) => {
+            const { access_token, refresh_token, token_type, ...userDetails } = action.payload;
+            const userRole = (userDetails.role || userDetails.user?.role)?.toUpperCase();
+            const portal = action.meta.arg?.portal;
+
+            // Block Super Admin from common portal
+            if (portal !== 'admin' && userRole === 'SUPER_ADMIN') {
+                state.loading = false;
+                state.error = "Access Denied: Super Admins must use the Clinical Operations Portal.";
+                state.token = null;
+                state.user = null;
+                TokenService.removeUser();
+                return;
+            }
+
             state.loading = false;
             state.token = action.payload.access_token;
             state.refreshToken = action.payload.refresh_token;
             state.successMessage = "Login successful!";
-
-            // Backend returns user details along with tokens in UserWithToken
-            const { access_token, refresh_token, token_type, ...userDetails } = action.payload;
             state.user = userDetails;
 
             TokenService.setUser(userDetails);

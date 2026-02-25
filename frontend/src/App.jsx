@@ -2,7 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { useSelector } from 'react-redux';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
-import Patients from './pages/Patients';
+import Patients from './pages/doctor/Patients';
 import Sessions from './pages/Sessions';
 import SessionDetails from './pages/SessionDetails';
 import SuperAdminDashboard from './pages/superadmin/Dashboard';
@@ -29,21 +29,28 @@ function App() {
             <Routes>
                 <Route path="/admin" element={
                     !token ? (
-                        <Login allowedRoles={['SUPER_ADMIN']} portalTitle="Clinical Operations Portal" />
+                        <Login allowedRoles={['SUPER_ADMIN', 'ADMIN', 'HOSPITAL']} portalTitle="Clinical Operations Portal" />
                     ) : (
-                        (user?.role || user?.user?.role)?.toUpperCase() === 'SUPER_ADMIN' ? <Navigate to="/superadmin" /> : <Navigate to="/" />
+                        (() => {
+                            const role = (user?.role || user?.user?.role)?.toUpperCase();
+                            if (role === 'SUPER_ADMIN') return <Navigate to="/superadmin" />;
+                            if (role === 'ADMIN' || role === 'HOSPITAL') return <Navigate to="/hospital-admin" />;
+                            return <Navigate to="/" />;
+                        })()
                     )
                 } />
                 <Route path="/" element={
                     !token ? (
                         <Auth />
                     ) : (
-                        (user?.role || user?.user?.role)?.toUpperCase() === 'SUPER_ADMIN' ? <Navigate to="/superadmin" /> : (
-                            (user?.role || user?.user?.role)?.toUpperCase() === 'ADMIN' || (user?.role || user?.user?.role)?.toUpperCase() === 'HOSPITAL' ? <Navigate to="/hospital-admin" /> :
-                                (user?.role || user?.user?.role)?.toUpperCase() === 'RECEPTIONIST' ? <Navigate to="/receptionist" /> :
-                                    (user?.role || user?.user?.role)?.toUpperCase() === 'DOCTOR' ? <Navigate to="/doctor" /> :
-                                        <Dashboard />
-                        )
+                        (() => {
+                            const role = (user?.role || user?.user?.role)?.toUpperCase();
+                            if (role === 'SUPER_ADMIN') return <Navigate to="/superadmin" />;
+                            if (role === 'ADMIN' || role === 'HOSPITAL') return <Navigate to="/hospital-admin" />;
+                            if (role === 'RECEPTIONIST') return <Navigate to="/receptionist" />;
+                            if (role === 'DOCTOR') return <Navigate to="/doctor" />;
+                            return <Dashboard />;
+                        })()
                     )
                 } />
                 <Route path="/register" element={<Auth />} />

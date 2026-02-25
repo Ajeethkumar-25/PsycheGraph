@@ -9,11 +9,27 @@ export const createSession = createAsyncThunk('sessions/create', async (formData
     }
 });
 
+export const fetchLanguages = createAsyncThunk('sessions/fetchLanguages', async (_, { rejectWithValue }) => {
+    try {
+        return await SessionService.fetchLanguages();
+    } catch (error) {
+        return rejectWithValue(error.response?.data?.detail || 'Failed to fetch languages');
+    }
+});
+
 export const fetchSessions = createAsyncThunk('sessions/fetchAll', async (patientId = null, { rejectWithValue }) => {
     try {
         return await SessionService.fetchSessions(patientId);
     } catch (error) {
         return rejectWithValue(error.response?.data?.detail || 'Failed to fetch sessions');
+    }
+});
+
+export const fetchSessionById = createAsyncThunk('sessions/fetchById', async (id, { rejectWithValue }) => {
+    try {
+        return await SessionService.fetchSessionById(id);
+    } catch (error) {
+        return rejectWithValue(error.response?.data?.detail || 'Failed to fetch session details');
     }
 });
 
@@ -37,6 +53,7 @@ const sessionSlice = createSlice({
     name: 'sessions',
     initialState: {
         list: [],
+        languages: [],
         currentSession: null,
         loading: false,
         error: null,
@@ -58,6 +75,17 @@ const sessionSlice = createSlice({
             .addCase(createSession.pending, (state) => { state.loading = true; state.error = null; })
             .addCase(createSession.fulfilled, (state, action) => { state.loading = false; state.list.unshift(action.payload); })
             .addCase(createSession.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
+
+            .addCase(fetchLanguages.fulfilled, (state, action) => {
+                state.languages = action.payload;
+            })
+
+            .addCase(fetchSessionById.pending, (state) => { state.loading = true; state.error = null; })
+            .addCase(fetchSessionById.fulfilled, (state, action) => {
+                state.loading = false;
+                state.currentSession = action.payload;
+            })
+            .addCase(fetchSessionById.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
 
             .addCase(updateSession.fulfilled, (state, action) => {
                 const index = state.list.findIndex(s => s.id === action.payload.id);

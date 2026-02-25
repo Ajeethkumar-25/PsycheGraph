@@ -69,6 +69,7 @@ const AllUserSlice = createSlice({
     name: 'users',
     initialState: {
         list: [],
+        receptionists: [],
         selectedUser: null,
         loading: false,
         error: null,
@@ -112,16 +113,20 @@ const AllUserSlice = createSlice({
             })
             .addCase(deleteUser.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
 
+            .addCase(fetchReceptionists.pending, (state) => { state.loading = true; state.error = null; })
+            .addCase(fetchReceptionists.fulfilled, (state, action) => { state.loading = false; state.receptionists = action.payload; })
+            .addCase(fetchReceptionists.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
+
             .addMatcher(
-                (action) => [fetchDoctors.pending.type, fetchReceptionists.pending.type, fetchHospitals.pending.type].includes(action.type),
+                (action) => [fetchDoctors.pending.type, fetchHospitals.pending.type].includes(action.type),
                 (state) => { state.loading = true; state.error = null; }
             )
             .addMatcher(
-                (action) => [fetchDoctors.fulfilled.type, fetchReceptionists.fulfilled.type, fetchHospitals.fulfilled.type].includes(action.type),
+                (action) => [fetchDoctors.fulfilled.type, fetchHospitals.fulfilled.type].includes(action.type),
                 (state, action) => { state.loading = false; state.list = action.payload; }
             )
             .addMatcher(
-                (action) => [fetchDoctors.rejected.type, fetchReceptionists.rejected.type, fetchHospitals.rejected.type].includes(action.type),
+                (action) => [fetchDoctors.rejected.type, fetchHospitals.rejected.type].includes(action.type),
                 (state, action) => { state.loading = false; state.error = action.payload; }
             );
     },

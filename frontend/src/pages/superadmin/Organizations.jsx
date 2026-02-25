@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Building2, Plus, Key, MoreVertical, Search, Loader2, X, Check, ShieldAlert, Trash2 } from 'lucide-react';
+import { Building2, Plus, Key, MoreVertical, Search, Loader2, X, Check, ShieldAlert, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { fetchOrganizations, createOrganization, deleteOrganization } from '../../store/slices/OrgSlice';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -14,6 +14,9 @@ export default function Organizations() {
     const [formData, setFormData] = useState({ name: '', license_key: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isDeleting, setIsDeleting] = useState(null);
+
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 6;
 
     useEffect(() => {
         dispatch(fetchOrganizations());
@@ -50,6 +53,11 @@ export default function Organizations() {
     const filteredOrgs = organizations.filter(org =>
         org.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
+    // Reset pagination when search query changes
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm]);
 
     return (
         <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -95,56 +103,104 @@ export default function Organizations() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {loading && organizations.length === 0 ? (
-                                <tr>
-                                    <td colSpan="5" className="px-6 py-12 text-center">
-                                        <Loader2 className="animate-spin text-primary-600 mx-auto" size={32} />
-                                    </td>
-                                </tr>
-                            ) : filteredOrgs.map((org) => (
-                                <tr key={org.id} className="hover:bg-slate-50 transition-colors group">
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="h-10 w-10 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center font-bold">
-                                                {org.name[0]}
+                            {(() => {
+                                const indexOfLastItem = currentPage * itemsPerPage;
+                                const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+                                const currentItems = filteredOrgs.slice(indexOfFirstItem, indexOfLastItem);
+
+                                if (loading && organizations.length === 0) {
+                                    return (
+                                        <tr>
+                                            <td colSpan="5" className="px-6 py-12 text-center">
+                                                <Loader2 className="animate-spin text-primary-600 mx-auto" size={32} />
+                                            </td>
+                                        </tr>
+                                    );
+                                }
+
+                                return currentItems.map((org) => (
+                                    <tr key={org.id} className="hover:bg-slate-50 transition-colors group">
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="h-10 w-10 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center font-bold">
+                                                    {org.name[0]}
+                                                </div>
+                                                <span className="font-bold text-slate-900">{org.name}</span>
                                             </div>
-                                            <span className="font-bold text-slate-900">{org.name}</span>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 font-mono text-sm text-slate-500">
-                                        <div className="flex items-center gap-2">
-                                            <Key size={14} className="text-slate-400" />
-                                            {org.license_key}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase ring-1 ring-inset ring-emerald-600/20">
-                                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                                            Active
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-slate-500">
-                                        {new Date(org.created_at || Date.now()).toLocaleDateString()}
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <button
-                                            onClick={() => handleDeleteOrg(org)}
-                                            disabled={isDeleting === org.id}
-                                            title="Delete Organization"
-                                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                                        >
-                                            {isDeleting === org.id ? (
-                                                <Loader2 size={18} className="animate-spin" />
-                                            ) : (
-                                                <Trash2 size={18} />
-                                            )}
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
+                                        </td>
+                                        <td className="px-6 py-4 font-mono text-sm text-slate-500">
+                                            <div className="flex items-center gap-2">
+                                                <Key size={14} className="text-slate-400" />
+                                                {org.license_key}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase ring-1 ring-inset ring-emerald-600/20">
+                                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                                Active
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-slate-500">
+                                            {new Date(org.created_at || Date.now()).toLocaleDateString()}
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <button
+                                                onClick={() => handleDeleteOrg(org)}
+                                                disabled={isDeleting === org.id}
+                                                title="Delete Organization"
+                                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                            >
+                                                {isDeleting === org.id ? (
+                                                    <Loader2 size={18} className="animate-spin" />
+                                                ) : (
+                                                    <Trash2 size={18} />
+                                                )}
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ));
+                            })()}
                         </tbody>
                     </table>
                 </div>
+
+                {filteredOrgs.length > itemsPerPage && (
+                    <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/30 flex items-center justify-between">
+                        <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                            Showing {Math.min((currentPage - 1) * itemsPerPage + 1, filteredOrgs.length)} to {Math.min(currentPage * itemsPerPage, filteredOrgs.length)} of {filteredOrgs.length}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                disabled={currentPage === 1}
+                                className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-all"
+                            >
+                                <ChevronLeft size={16} />
+                            </button>
+                            <div className="flex items-center gap-1">
+                                {[...Array(Math.ceil(filteredOrgs.length / itemsPerPage))].map((_, i) => (
+                                    <button
+                                        key={i}
+                                        onClick={() => setCurrentPage(i + 1)}
+                                        className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${currentPage === i + 1
+                                                ? "bg-primary-600 text-white shadow-md shadow-primary-200"
+                                                : "bg-white text-slate-600 border border-slate-200 hover:border-primary-300 hover:text-primary-600"
+                                            }`}
+                                    >
+                                        {i + 1}
+                                    </button>
+                                ))}
+                            </div>
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(filteredOrgs.length / itemsPerPage)))}
+                                disabled={currentPage === Math.ceil(filteredOrgs.length / itemsPerPage)}
+                                className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-all"
+                            >
+                                <ChevronRight size={16} />
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Add Org Modal */}

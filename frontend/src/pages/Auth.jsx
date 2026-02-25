@@ -15,7 +15,7 @@ import {
     Plus,
     Activity
 } from 'lucide-react';
-import { login, loginHospital, clearError, registerHospital } from '../store/slices/AllLoginSlice';
+import { login, loginHospital, clearError, registerHospital, logout } from '../store/slices/AllLoginSlice';
 import { useNavigate, Link } from 'react-router-dom';
 import loginSide from '../assets/new-logo.png';
 
@@ -50,8 +50,8 @@ export default function Auth() {
     const handleLogin = async (e) => {
         e.preventDefault();
         try {
-            // Role detection happens in App.jsx, we just trigger login
-            await dispatch(login(loginData)).unwrap();
+            // Role restriction is handled in Redux layer via portal flag
+            await dispatch(login({ ...loginData, portal: 'common' })).unwrap();
         } catch (err) { }
     };
 
@@ -136,11 +136,11 @@ export default function Auth() {
 
                 {/* Visual Content */}
                 <div className="relative z-10 w-full max-w-sm md:max-w-lg flex flex-col items-center text-center">
-                    <div className="mb-4 md:mb-6">
+                    {/* <div className="mb-4 md:mb-6">
                         <div className="w-10 h-10 md:w-14 md:h-14 bg-[#070b10] rounded-xl md:rounded-2xl flex items-center justify-center shadow-lg transform transition-transform hover:scale-105">
                             <Activity className="text-white w-6 h-6 md:w-8 md:h-8" strokeWidth={2.5} />
                         </div>
-                    </div>
+                    </div> */}
 
                     <div className="space-y-2 md:space-y-3">
                         <h1 className="text-2xl md:text-4xl font-serif font-black text-white tracking-normal mb-1 drop-shadow-xl">

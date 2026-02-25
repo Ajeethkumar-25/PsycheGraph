@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Building2, Users, CreditCard, Activity, ShieldCheck, Globe, TrendingUp, Zap, CheckCircle2, AlertCircle, Stethoscope } from 'lucide-react';
+import { Building2, Users, CreditCard, Activity, ShieldCheck, Globe, TrendingUp, Zap, CheckCircle2, AlertCircle, Stethoscope, ArrowRight } from 'lucide-react';
 import { fetchOrganizations } from '../../store/slices/OrgSlice';
 import { fetchUsers } from '../../store/slices/AllUserSlice';
 import { fetchPatients } from '../../store/slices/PatientSlice';
@@ -145,7 +146,7 @@ export default function SuperAdminDashboard() {
                 {/* Header */}
                 <motion.div variants={itemVariants} className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-slate-900 via-primary-600 to-slate-900 mb-2">
+                        <h1 className="text-4xl font-black text-transparent bg-clip-text  bg-slate-800 mb-2">
                             Platform Overview
                         </h1>
                         <p className="text-slate-600 font-medium flex items-center gap-2">
@@ -153,7 +154,7 @@ export default function SuperAdminDashboard() {
                             Global system governance and organization metrics
                         </p>
                     </div>
-                    <motion.div
+                    {/* <motion.div
                         whileHover={{ scale: 1.05 }}
                         className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-full shadow-lg shadow-emerald-500/30"
                     >
@@ -163,7 +164,7 @@ export default function SuperAdminDashboard() {
                             className="h-2 w-2 rounded-full bg-white"
                         />
                         <span className="text-xs font-bold uppercase tracking-wider">All Systems Operational</span>
-                    </motion.div>
+                    </motion.div> */}
                 </motion.div>
 
                 {/* Stats Grid */}
@@ -250,26 +251,38 @@ export default function SuperAdminDashboard() {
                     </motion.div>
 
                     {/* Right Column: Quick Actions & Renewals */}
-                    <div className="space-y-8">
-                        {/* Quick Actions */}
-                        {/* Other Section */}
-                        <motion.div
-                            variants={itemVariants}
-                            className="relative backdrop-blur-xl bg-white/80 rounded-2xl shadow-xl border border-white/50 overflow-hidden h-full min-h-[200px]"
-                        >
-                            <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-pink-50 to-rose-50">
-                                <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                                    <AlertCircle className="text-pink-600" size={24} />
-                                    Other actions
-                                </h3>
-                            </div>
-                            <div className="p-6 flex items-center justify-center h-40">
-                                <p className="text-sm text-slate-500 font-bold">
-                                    Additional administrative actions can be placed here.
-                                </p>
-                            </div>
-                        </motion.div>
-                    </div>
+                    <motion.div
+                        variants={itemVariants}
+                        className="relative backdrop-blur-xl bg-white/80 rounded-2xl shadow-xl border border-white/50 overflow-hidden h-full"
+                    >
+                        <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-blue-50">
+                            <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                                <ShieldCheck className="text-indigo-600" size={24} />
+                                Platform Controls
+                            </h3>
+                        </div>
+                        <div className="p-6 grid grid-cols-1 gap-4">
+                            {[
+                                { label: 'Manage Organizations', icon: Building2, path: '/superadmin/organizations', color: 'blue' },
+                                { label: 'User Governance', icon: Users, path: '/superadmin/users', color: 'indigo' },
+                                { label: 'Hospital Intel', icon: Stethoscope, path: '/superadmin/hospitals', color: 'purple' }
+                            ].map((action) => (
+                                <Link
+                                    key={action.label}
+                                    to={action.path}
+                                    className="flex items-center justify-between p-4 rounded-xl bg-slate-50 hover:bg-white hover:shadow-md border border-slate-100 transition-all group"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                            <action.icon size={20} />
+                                        </div>
+                                        <span className="font-bold text-slate-700">{action.label}</span>
+                                    </div>
+                                    <ArrowRight size={18} className="text-slate-300 group-hover:text-primary-500 group-hover:translate-x-1 transition-all" />
+                                </Link>
+                            ))}
+                        </div>
+                    </motion.div>
                 </div>
             </motion.div>
         </div>

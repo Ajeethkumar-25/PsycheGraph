@@ -6,8 +6,8 @@ const AllUserService = {
             const response = await api.get('/admin/doctors');
             return response.data;
         } catch (error) {
-            if (error.response?.status === 403) return [];
-            throw error;
+            console.error('Error fetching doctors:', error.response?.data || error);
+            return [];
         }
     },
 
@@ -16,8 +16,8 @@ const AllUserService = {
             const response = await api.get('/admin/receptionists');
             return response.data;
         } catch (error) {
-            if (error.response?.status === 403) return [];
-            throw error;
+            console.error('Error fetching receptionists:', error);
+            return [];
         }
     },
 
@@ -34,12 +34,18 @@ const AllUserService = {
     fetchUsers: async () => {
         try {
             const [doctors, receptionists] = await Promise.all([
-                api.get('/admin/doctors').catch(e => e.response?.status === 403 ? { data: [] } : Promise.reject(e)),
-                api.get('/admin/receptionists').catch(e => e.response?.status === 403 ? { data: [] } : Promise.reject(e))
+                api.get('/admin/doctors').catch(error => {
+                    console.error('Failed to fetch doctors in combined list:', error);
+                    return { data: [] };
+                }),
+                api.get('/admin/receptionists').catch(error => {
+                    console.error('Failed to fetch receptionists in combined list:', error);
+                    return { data: [] };
+                })
             ]);
-            return [...doctors.data, ...receptionists.data];
+            return [...(doctors?.data || []), ...(receptionists?.data || [])];
         } catch (error) {
-            console.error('Error fetching combined users:', error);
+            console.error('Error in combined user fetching:', error);
             return [];
         }
     },

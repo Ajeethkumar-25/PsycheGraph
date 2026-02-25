@@ -57,6 +57,14 @@ export const updateAppointment = createAsyncThunk('appointments/update', async (
     }
 });
 
+export const rescheduleAppointment = createAsyncThunk('appointments/reschedule', async ({ id, data }, { rejectWithValue }) => {
+    try {
+        return await AppointmentService.rescheduleAppointment(id, data);
+    } catch (error) {
+        return rejectWithValue(error.response?.data?.detail || 'Failed to reschedule appointment');
+    }
+});
+
 export const deleteAppointment = createAsyncThunk('appointments/delete', async (id, { rejectWithValue }) => {
     try {
         return await AppointmentService.deleteAppointment(id);
@@ -89,6 +97,10 @@ const appointmentSlice = createSlice({
             .addCase(createAppointment.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
 
             .addCase(updateAppointment.fulfilled, (state, action) => {
+                const index = state.list.findIndex(a => a.id === action.payload.id);
+                if (index !== -1) state.list[index] = action.payload;
+            })
+            .addCase(rescheduleAppointment.fulfilled, (state, action) => {
                 const index = state.list.findIndex(a => a.id === action.payload.id);
                 if (index !== -1) state.list[index] = action.payload;
             })

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchAppointments, createAppointment, deleteAppointment } from '../../store/slices/AppointmentSlice';
 import { fetchPatients } from '../../store/slices/PatientSlice';
-import { Calendar, Clock, Plus, X, Loader2 } from 'lucide-react';
+import { Calendar, Clock, Plus, X, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function DoctorAppointments() {
     const dispatch = useDispatch();
@@ -18,6 +18,9 @@ export default function DoctorAppointments() {
         time: '',
         notes: ''
     });
+
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 6;
 
     useEffect(() => {
         dispatch(fetchAppointments());
@@ -75,24 +78,68 @@ export default function DoctorAppointments() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {appointments.map(app => (
-                                <tr key={app.id} className="hover:bg-slate-50 transition">
-                                    <td className="px-6 py-4">
-                                        <div className="flex flex-col">
-                                            <span className="font-semibold text-slate-900">{new Date(app.start_time).toLocaleDateString()}</span>
-                                            <span className="text-slate-500 text-xs">{new Date(app.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 font-medium">{app.patient_name}</td>
-                                    <td className="px-6 py-4 text-slate-500">Follow-up</td>
-                                    <td className="px-6 py-4">
-                                        <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded uppercase">{app.status}</span>
-                                    </td>
-                                </tr>
-                            ))}
+                            {(() => {
+                                const indexOfLastItem = currentPage * itemsPerPage;
+                                const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+                                const currentItems = appointments.slice(indexOfFirstItem, indexOfLastItem);
+
+                                return currentItems.map(app => (
+                                    <tr key={app.id} className="hover:bg-slate-50 transition">
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-col">
+                                                <span className="font-semibold text-slate-900">{new Date(app.start_time).toLocaleDateString()}</span>
+                                                <span className="text-slate-500 text-xs">{new Date(app.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 font-medium">{app.patient_name}</td>
+                                        <td className="px-6 py-4 text-slate-500">Follow-up</td>
+                                        <td className="px-6 py-4">
+                                            <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded uppercase">{app.status}</span>
+                                        </td>
+                                    </tr>
+                                ));
+                            })()}
                         </tbody>
                     </table>
                 </div>
+
+                {appointments.length > itemsPerPage && (
+                    <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/30 flex items-center justify-between">
+                        <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                            Showing {Math.min((currentPage - 1) * itemsPerPage + 1, appointments.length)} to {Math.min(currentPage * itemsPerPage, appointments.length)} of {appointments.length}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                disabled={currentPage === 1}
+                                className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-all"
+                            >
+                                <ChevronLeft size={16} />
+                            </button>
+                            <div className="flex items-center gap-1">
+                                {[...Array(Math.ceil(appointments.length / itemsPerPage))].map((_, i) => (
+                                    <button
+                                        key={i}
+                                        onClick={() => setCurrentPage(i + 1)}
+                                        className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${currentPage === i + 1
+                                                ? "bg-primary-600 text-white shadow-md shadow-primary-200"
+                                                : "bg-white text-slate-600 border border-slate-200 hover:border-primary-300 hover:text-primary-600"
+                                            }`}
+                                    >
+                                        {i + 1}
+                                    </button>
+                                ))}
+                            </div>
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(appointments.length / itemsPerPage)))}
+                                disabled={currentPage === Math.ceil(appointments.length / itemsPerPage)}
+                                className="p-2 rounded-lg border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-all"
+                            >
+                                <ChevronRight size={16} />
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {isModalOpen && (

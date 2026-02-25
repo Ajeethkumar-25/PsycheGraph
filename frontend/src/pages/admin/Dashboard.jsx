@@ -15,24 +15,26 @@ import {
     Sparkles,
     Clock
 } from 'lucide-react';
-import { fetchUsers } from '../../store/slices/AllUserSlice';
+import { fetchUsers, fetchReceptionists } from '../../store/slices/AllUserSlice';
 import { fetchPatients } from '../../store/slices/PatientSlice';
 import { fetchAppointments } from '../../store/slices/AppointmentSlice';
 
+
 export default function AdminDashboard() {
     const dispatch = useDispatch();
-    const { list: users, loading: usersLoading } = useSelector((state) => state.users);
+    const { list: users, receptionists, loading: usersLoading } = useSelector((state) => state.users);
     const { list: patients, loading: patientsLoading } = useSelector((state) => state.patients);
     const { list: appointments, loading: appointmentsLoading } = useSelector((state) => state.appointments);
 
     useEffect(() => {
         dispatch(fetchUsers());
+        dispatch(fetchReceptionists());
         dispatch(fetchPatients());
         dispatch(fetchAppointments());
     }, [dispatch]);
 
-    const doctorsCount = users.filter(user => user.role === 'DOCTOR').length;
-    const receptionistsCount = users.filter(user => user.role === 'RECEPTIONIST').length;
+    const doctorsCount = users.filter(user => user.role?.toUpperCase() === 'DOCTOR').length;
+    const receptionistsCount = receptionists.length;
     const patientsCount = patients.length;
 
     // Real appointment stats
@@ -189,8 +191,8 @@ export default function AdminDashboard() {
                                                 {appointment.time_slot || 'TBD'}
                                             </span>
                                             <span className={`px-2 py-1 rounded-lg text-[10px] font-semibold ${appointment.status === 'CONFIRMED' ? 'bg-emerald-50 text-emerald-600' :
-                                                    appointment.status === 'PENDING' ? 'bg-amber-50 text-amber-600' :
-                                                        'bg-slate-50 text-slate-600'
+                                                appointment.status === 'PENDING' ? 'bg-amber-50 text-amber-600' :
+                                                    'bg-slate-50 text-slate-600'
                                                 }`}>
                                                 {appointment.status}
                                             </span>

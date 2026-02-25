@@ -28,7 +28,7 @@ export default function Login({
         setRoleError(null);
 
         const loginThunk = isHospitalPortal ? loginHospital : login;
-        const resultAction = await dispatch(loginThunk({ email, password }));
+        const resultAction = await dispatch(loginThunk({ email, password, portal: 'admin' }));
 
         if (login.fulfilled.match(resultAction) || loginHospital.fulfilled.match(resultAction)) {
             const userData = resultAction.payload;
@@ -113,7 +113,6 @@ export default function Login({
                                 {portalTitle}
                             </p>
                         </motion.div>
-
                         {/* Main Card */}
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
@@ -137,7 +136,7 @@ export default function Login({
                                         <div className="relative group">
                                             <Mail className="absolute left-4.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-600 transition-colors w-5 h-5 z-20 pointer-events-none" />
                                             <input
-                                                type="email" 
+                                                type="email"
                                                 required
                                                 value={email}
                                                 onChange={(e) => setEmail(e.target.value)}
