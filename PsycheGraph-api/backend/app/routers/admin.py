@@ -6,6 +6,10 @@ from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from .. import models, schemas, auth, dependencies, database
 from ..services.email import send_license_key_email
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
+executor = ThreadPoolExecutor()
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -17,7 +21,7 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 @router.post("/organizations/register", response_model=schemas.OrganizationOut)
 async def register_organization(
     org: schemas.OrganizationCreate,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN])),  # ← auth required now
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN])),
     db: AsyncSession = Depends(database.get_db)
 ):
     # Check if org name already exists
@@ -38,7 +42,7 @@ async def register_organization(
         name=org.name,
         email=org.email,
         license_key=org.license_key,
-        is_approved=True    # ← approved immediately since super admin is creating it
+        is_approved=True
     )
     db.add(new_org)
     try:
@@ -48,12 +52,16 @@ async def register_organization(
         await db.rollback()
         raise HTTPException(status_code=400, detail=f"Registration failed: {str(e)}")
 
-    # Email the license key to the org
+    # ✅ ONLY THIS — async email, no duplicate
     try:
-        send_license_key_email(
-            to_email=new_org.email,
-            org_name=new_org.name,
-            license_key=new_org.license_key
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            executor,
+            lambda: send_license_key_email(
+                to_email=new_org.email,
+                org_name=new_org.name,
+                license_key=new_org.license_key
+            )
         )
     except Exception as e:
         print(f"[WARNING] Email sending failed: {e}")
