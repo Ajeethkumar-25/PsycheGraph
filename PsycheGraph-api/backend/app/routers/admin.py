@@ -5,19 +5,28 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from .. import models, schemas, auth, dependencies, database
+from ..services.email import send_license_key_email
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
 # Super Admin: Create Organization
-@router.post("/organizations", response_model=schemas.OrganizationOut)
-async def create_organization(
+# Anyone can register their organization (no auth required)
+@router.post("/organizations/register", response_model=schemas.OrganizationOut)
+async def register_organization(
     org: schemas.OrganizationCreate,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN])),
     db: AsyncSession = Depends(database.get_db)
 ):
+    existing = await db.execute(
+        select(models.Organization).where(models.Organization.name == org.name)
+    )
+    if existing.scalars().first():
+        raise HTTPException(status_code=400, detail="Organization name already exists")
+
     new_org = models.Organization(
-        name=org.name, 
-        license_key=auth.generate_license_key()
+        name=org.name,
+        email=org.email,
+        license_key=None,
+        is_approved=False
     )
     db.add(new_org)
     try:
@@ -26,7 +35,63 @@ async def create_organization(
         return new_org
     except Exception as e:
         await db.rollback()
-        raise HTTPException(status_code=400, detail="Organization already exists")
+        raise HTTPException(status_code=400, detail=f"Registration failed: {str(e)}")
+
+
+# Super Admin: Approve org and generate + email license key
+@router.post("/organizations/{org_id}/approve", response_model=schemas.OrganizationApproveOut)
+async def approve_organization(
+    org_id: int,
+    approve_data: schemas.OrganizationApproveIn,  # ← add request body
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN])),
+    db: AsyncSession = Depends(database.get_db)
+):
+    result = await db.execute(
+        select(models.Organization).where(models.Organization.id == org_id)
+    )
+    org = result.scalars().first()
+
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    if org.is_approved:
+        raise HTTPException(status_code=400, detail="Organization is already approved")
+
+    # Check license key is not already used by another org
+    existing = await db.execute(
+        select(models.Organization).where(models.Organization.license_key == approve_data.license_key)
+    )
+    if existing.scalars().first():
+        raise HTTPException(status_code=400, detail="License key already in use")
+
+    # Use the manually entered license key instead of auto-generating
+    org.license_key = approve_data.license_key   # ← use manual key
+    org.is_approved = True
+
+    await db.commit()
+    await db.refresh(org)
+
+    try:
+        send_license_key_email(
+            to_email=org.email,
+            org_name=org.name,
+            license_key=org.license_key
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Email failed: {str(e)}")
+
+    return {**org.__dict__, "message": "License key saved and sent to registered email"}
+
+
+# Super Admin: View all pending (unapproved) organizations
+@router.get("/organizations/pending", response_model=List[schemas.OrganizationOut])
+async def get_pending_organizations(
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN])),
+    db: AsyncSession = Depends(database.get_db)
+):
+    result = await db.execute(
+        select(models.Organization).where(models.Organization.is_approved == False)
+    )
+    return result.scalars().all()
 
 # Helper for generic user listing/getting/updating/deleting with role filtering
 async def get_role_users(

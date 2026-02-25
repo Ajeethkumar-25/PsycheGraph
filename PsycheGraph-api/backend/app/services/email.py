@@ -1,0 +1,60 @@
+import os
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from dotenv import load_dotenv
+from pathlib import Path
+
+load_dotenv(Path(__file__).parent.parent.parent / ".env")
+
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+SMTP_USER = os.getenv("SMTP_USER")       # your Gmail address
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")  # your Gmail app password
+FROM_EMAIL = os.getenv("FROM_EMAIL", SMTP_USER)
+
+print(f"[EMAIL CONFIG] SMTP_HOST={SMTP_HOST}")
+print(f"[EMAIL CONFIG] SMTP_PORT={SMTP_PORT}")
+print(f"[EMAIL CONFIG] SMTP_USER={SMTP_USER}")
+print(f"[EMAIL CONFIG] SMTP_PASSWORD={'SET' if SMTP_PASSWORD else 'NOT SET'}")
+print(f"[EMAIL CONFIG] FROM_EMAIL={FROM_EMAIL}")
+
+
+def send_license_key_email(to_email: str, org_name: str, license_key: str):
+    if not SMTP_USER or not SMTP_PASSWORD:
+        print(f"[EMAIL SKIP] No SMTP config. License key for {org_name}: {license_key}")
+        return
+
+    subject = f"PsycheGraph — Your License Key for {org_name}"
+    body = f"""
+Dear {org_name} Team,
+
+Your organization has been approved on PsycheGraph!
+
+Your License Key is:
+
+    {license_key}
+
+Use this key to register doctors and receptionists under your organization.
+
+Please keep this key secure and do not share it publicly.
+
+Regards,
+PsycheGraph Team
+"""
+
+    msg = MIMEMultipart()
+    msg["From"] = FROM_EMAIL
+    msg["To"] = to_email
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain"))
+
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(FROM_EMAIL, to_email, msg.as_string())
+        print(f"[EMAIL SENT] License key sent to {to_email}")
+    except Exception as e:
+        print(f"[EMAIL ERROR] Failed to send email to {to_email}: {e}")
+        raise

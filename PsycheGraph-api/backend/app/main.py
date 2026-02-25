@@ -24,6 +24,9 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
         
         # Ensure new columns exist (Migration logic)
+        await conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS email VARCHAR;"))
+        await conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS is_approved BOOLEAN DEFAULT FALSE;"))
+        await conn.execute(text("ALTER TABLE organizations ALTER COLUMN license_key DROP NOT NULL;"))
         await conn.execute(text("ALTER TABLE availabilities ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);"))
         await conn.execute(text("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);"))
         
