@@ -9,6 +9,8 @@ from ..services.email import send_license_key_email
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
+#changes made 
+
 # Super Admin: Create Organization
 # Anyone can register their organization (no auth required)
 # Super Admin registers org with license key → emails it automatically
