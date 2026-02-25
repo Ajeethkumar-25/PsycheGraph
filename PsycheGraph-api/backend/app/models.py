@@ -20,6 +20,7 @@ class UserRole(str, enum.Enum):
 class AppointmentStatus(str, enum.Enum):
     SCHEDULED = "SCHEDULED"
     COMPLETED = "COMPLETED"
+    RESCHEDULED = "RESCHEDULED"
     CANCELLED = "CANCELLED"
 
 # -------------------------------------------------------------------
@@ -238,6 +239,8 @@ class Appointment(Base):
     # Denormalized fields
     patient_name = Column(String, nullable=True)
     doctor_name = Column(String, nullable=True)
+    patient_age = Column(Integer, nullable=True)
+    booked_by_role = Column(String, nullable=True)
 
     # Relationships
     patient = relationship("Patient", back_populates="appointments")

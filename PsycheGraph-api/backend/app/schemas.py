@@ -201,6 +201,8 @@ class AppointmentOut(AppointmentBase):
     organization_id: int
     doctor_name: Optional[str] = None
     patient_name: Optional[str] = None
+    patient_age: Optional[int] = None
+    booked_by_role: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -212,6 +214,9 @@ class AppointmentUpdate(BaseModel):
     status: Optional[str] = None
     notes: Optional[str] = None
     meet_link: Optional[str] = None
+
+class AppointmentReschedule(BaseModel):
+    new_availability_id: int
 
 class SessionUpdate(BaseModel):
     transcript: Optional[str] = None

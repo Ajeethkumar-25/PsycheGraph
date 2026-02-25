@@ -372,7 +372,7 @@ async def list_receptionists(
         select(models.User)
         .options(
             selectinload(models.User.doctor_profile),
-            selectinload(models.User.receptionist_profile)
+            selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctor)
         )
         .where(models.User.role == models.UserRole.RECEPTIONIST)
         .offset(skip)
@@ -420,7 +420,10 @@ async def update_receptionist(
     db: AsyncSession = Depends(database.get_db)
 ):
     # 1️⃣ Fetch receptionist user
-    query = select(models.User).where(
+    query = select(models.User).options(
+        selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctor),
+        selectinload(models.User.doctor_profile)
+    ).where(
         models.User.id == user_id,
         models.User.role == models.UserRole.RECEPTIONIST
     )

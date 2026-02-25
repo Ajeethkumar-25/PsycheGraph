@@ -33,7 +33,9 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("ALTER TABLE availabilities ADD COLUMN IF NOT EXISTS doctor_name VARCHAR;"))
         await conn.execute(text("ALTER TABLE availabilities ADD COLUMN IF NOT EXISTS organization_name VARCHAR;"))
         await conn.execute(text("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS patient_name VARCHAR;"))
+        await conn.execute(text("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS patient_age INTEGER;"))
         await conn.execute(text("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS doctor_name VARCHAR;"))
+        await conn.execute(text("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS booked_by_role VARCHAR;"))
         
     logger.info("Database tables and columns verified.")
     yield

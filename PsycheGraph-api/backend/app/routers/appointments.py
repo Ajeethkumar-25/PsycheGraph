@@ -252,7 +252,9 @@ async def book_appointment(
         meet_link=meet_link,
         status="SCHEDULED",
         patient_name=patient.full_name,
+        patient_age=booking.patient_age,
         doctor_name=slot.doctor.full_name if slot.doctor else None,
+        booked_by_role=current_user.role.value,
         created_by_id=current_user.id
     )
     
@@ -327,5 +329,85 @@ async def get_appointments(
     else:
         raise HTTPException(status_code=403, detail="Not authorized")
         
+    result = await db.execute(query)
+    return result.scalars().all()
+
+#-----to reschedule the appointment time slot
+
+@router.post("/{appointment_id}/reschedule", response_model=schemas.AppointmentOut)
+async def reschedule_appointment(
+    appointment_id: int,
+    new_booking: schemas.AppointmentReschedule, # Add this to schemas.py
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.DOCTOR, models.UserRole.RECEPTIONIST])),
+    db: AsyncSession = Depends(database.get_db)
+):
+    # 1. Find the existing appointment
+    app_res = await db.execute(
+        select(models.Appointment)
+        .options(selectinload(models.Appointment.doctor), selectinload(models.Appointment.patient))
+        .where(models.Appointment.id == appointment_id)
+    )
+    appointment = app_res.scalars().first()
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    # 2. Check organization security
+    if appointment.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=403, detail="Not authorized to modify this appointment")
+
+    # 3. Fetch the new availability slot
+    slot_res = await db.execute(
+        select(models.Availability).where(models.Availability.id == new_booking.new_availability_id)
+    )
+    new_slot = slot_res.scalars().first()
+    
+    if not new_slot or new_slot.is_booked:
+        raise HTTPException(status_code=400, detail="New slot is unavailable or already booked")
+
+    # 4. Handle the slot swap
+    # Free up the old slot
+    old_slot_res = await db.execute(
+        select(models.Availability).where(models.Availability.id == appointment.availability_id)
+    )
+    old_slot = old_slot_res.scalars().first()
+    if old_slot:
+        old_slot.is_booked = False
+
+    # Update appointment and mark new slot booked
+    appointment.availability_id = new_slot.id
+    appointment.start_time = new_slot.start_time
+    appointment.end_time = new_slot.end_time
+    appointment.appointment_date = new_slot.start_time
+    appointment.status = models.AppointmentStatus.RESCHEDULED
+    new_slot.is_booked = True
+
+    await db.commit()
+    await db.refresh(appointment)
+    return appointment
+
+
+#----to get the updated appointment details
+
+@router.get("/updated", response_model=List[schemas.AppointmentOut])
+async def get_updated_appointments(
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.DOCTOR, models.UserRole.RECEPTIONIST])),
+    db: AsyncSession = Depends(database.get_db)
+):
+    # Base query for active/updated appointments
+    query = select(models.Appointment).options(
+        selectinload(models.Appointment.doctor),
+        selectinload(models.Appointment.patient)
+    ).where(models.Appointment.status == models.AppointmentStatus.RESCHEDULED)
+
+    # Filter by organization to ensure data privacy
+    query = query.where(models.Appointment.organization_id == current_user.organization_id)
+    
+    # If the current user is a doctor, show only their specific appointments
+    if current_user.role == models.UserRole.DOCTOR:
+        query = query.where(models.Appointment.doctor_id == current_user.doctor_id)
+
+    # Add this line right before 'result = await db.execute(query)'
+    print(f"DEBUG: Query Status Filter is: {models.AppointmentStatus.RESCHEDULED}")
+    
     result = await db.execute(query)
     return result.scalars().all()
