@@ -14,7 +14,15 @@ if not DATABASE_URL:
     DATABASE_URL = "postgresql+asyncpg://user:password@localhost/psychegraph"
     print(f"WARNING: DATABASE_URL not found in environment. Falling back to default: {DATABASE_URL}")
 
-engine = create_async_engine(DATABASE_URL, echo=True)
+engine = create_async_engine(
+    DATABASE_URL,
+    echo=True,
+    pool_size=10,
+    max_overflow=20,
+    pool_timeout=30,
+    pool_recycle=1800,
+    pool_pre_ping=True,    # ← tests connection before use, prevents dropped connection errors
+)
 
 AsyncSessionLocal = sessionmaker(
     bind=engine,

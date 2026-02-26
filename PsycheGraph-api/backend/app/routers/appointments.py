@@ -6,6 +6,11 @@ from typing import List, Optional
 from .. import models, schemas, dependencies, database
 from datetime import datetime, timedelta, timezone
 from ..services.google_calendar import GoogleCalendarService
+from ..services.email import send_appointment_email
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
+executor = ThreadPoolExecutor()
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -235,9 +240,6 @@ async def book_appointment(
     )
     
     if not meet_link:
-        # User requested to remove all mock/placeholder links.
-        # If Google fails, we might want to log this or raise an error, 
-        # but for now we'll just let it be None as the schema allows it.
         pass
 
     new_app = models.Appointment(
@@ -259,10 +261,30 @@ async def book_appointment(
     )
     
     slot.is_booked = True
-    
     db.add(new_app)
     await db.commit()
-    
+
+    # ← Send confirmation email to patient
+    if patient.email:
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                executor,
+                lambda: send_appointment_email(
+                    to_email=patient.email,
+                    patient_name=patient.full_name,
+                    doctor_name=slot.doctor.full_name if slot.doctor else "Unknown",
+                    doctor_id=slot.doctor_id,
+                    role=current_user.role.value,
+                    appointment_date=slot.start_time.strftime("%Y-%m-%d"),
+                    start_time=slot.start_time.strftime("%H:%M"),
+                    end_time=slot.end_time.strftime("%H:%M"),
+                    meet_link=meet_link or ""
+                )
+            )
+        except Exception as e:
+            print(f"[WARNING] Appointment email failed: {e}")
+
     res = await db.execute(
         select(models.Appointment)
         .options(

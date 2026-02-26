@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from datetime import datetime
 from typing import List
 from .. import models, schemas, dependencies, database
 
@@ -37,7 +38,7 @@ async def create_patient(
 
     new_patient = models.Patient(
         full_name=patient.full_name,
-        date_of_birth=patient.date_of_birth.replace(tzinfo=None) if patient.date_of_birth else None,
+        date_of_birth=datetime.combine(patient.date_of_birth, datetime.min.time()) if patient.date_of_birth else None,
         phone=patient.contact_number,
         email=patient.email,
         gender=patient.gender,

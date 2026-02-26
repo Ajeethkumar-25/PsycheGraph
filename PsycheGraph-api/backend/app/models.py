@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Column, Integer, String, Boolean, ForeignKey, DateTime, Text, Enum, UniqueConstraint, Index
+    Column, Integer, String, Boolean, ForeignKey, DateTime, Date, Text, Enum, UniqueConstraint, Index
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -32,11 +32,11 @@ class Organization(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True, nullable=False)
-    email = Column(String, nullable=False)
+    email = Column(String, nullable=False, index=True)          
     license_key = Column(String, unique=True, nullable=False, index=True)
-    is_approved = Column(Boolean, default=False, nullable=False)
+    is_approved = Column(Boolean, default=False, nullable=False, index=True)  # ← add index (pending filter)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    is_active = Column(Boolean, default=True, nullable=False)
 
     # Relationships
     users = relationship("User", back_populates="organization", cascade="all, delete-orphan")
@@ -171,14 +171,14 @@ class Patient(Base):
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
     doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=False, index=True)
     full_name = Column(String, nullable=False, index=True)
-    date_of_birth = Column(DateTime, nullable=True)
+    date_of_birth = Column(Date, nullable=True)
     gender = Column(String, nullable=True)
     phone = Column(String, nullable=True, index=True)
     email = Column(String, nullable=True, index=True)
     address = Column(String, nullable=True)
-    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)  # ← add index (receptionist filter)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    is_active = Column(Boolean, default=True, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
 
     # Relationships
     organization = relationship("Organization", back_populates="patients")
@@ -213,6 +213,8 @@ class Availability(Base):
     __table_args__ = (
         UniqueConstraint('doctor_id', 'start_time', name='uq_doctor_start_time'),
         Index('idx_doctor_start', 'doctor_id', 'start_time'),
+        Index('idx_org_booked', 'organization_id', 'is_booked'),
+        Index('idx_doctor_booked', 'doctor_id', 'is_booked'),
     )
 
     # Relationships
@@ -244,6 +246,13 @@ class Appointment(Base):
     patient_age = Column(Integer, nullable=True)
     booked_by_role = Column(String, nullable=True)
 
+    __table_args__ = (
+        Index('idx_apt_doctor_status', 'doctor_id', 'status'),
+        Index('idx_apt_org_status', 'organization_id', 'status'),
+        Index('idx_apt_patient_status', 'patient_id', 'status'),
+        Index('idx_apt_date_status', 'appointment_date', 'status'),
+    )
+
     # Relationships
     patient = relationship("Patient", back_populates="appointments")
     doctor = relationship("Doctor", back_populates="appointments")
@@ -258,15 +267,18 @@ class Session(Base):
     id = Column(Integer, primary_key=True, index=True)
     patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False, index=True)
     doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=False, index=True)
-    appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=True, unique=True)
+    appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=True, unique=True, index=True)
     audio_url = Column(String, nullable=True)
     transcript = Column(Text, nullable=True)
     summary = Column(Text, nullable=True)
     soap_notes = Column(Text, nullable=True)
-    session_date = Column(DateTime(timezone=True), nullable=False)
+    session_date = Column(DateTime(timezone=True), nullable=False, index=True)
     version = Column(Integer, default=1, nullable=False)
-    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    # Alias for compatibility with code using 'soap_note'
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+        # Properties — AFTER all columns
     @property
     def soap_note(self):
         return self.soap_notes
@@ -275,8 +287,13 @@ class Session(Base):
     def soap_note(self, value):
         self.soap_notes = value
 
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    @property
+    def date(self):
+        return self.session_date
+
+    @date.setter
+    def date(self, value):
+        self.session_date = value
 
     # Relationships
     patient = relationship("Patient", back_populates="sessions")

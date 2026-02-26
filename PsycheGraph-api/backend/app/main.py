@@ -24,21 +24,25 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
         
         # Ensure new columns exist (Migration logic)
-        await conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS email VARCHAR;"))
-        await conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS is_approved BOOLEAN DEFAULT FALSE;"))
-        await conn.execute(text("ALTER TABLE organizations ALTER COLUMN license_key DROP NOT NULL;"))
-        await conn.execute(text("ALTER TABLE availabilities ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);"))
-        await conn.execute(text("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_org_email ON organizations(email);"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_org_is_approved ON organizations(is_approved);"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_org_is_active ON organizations(is_active);"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_patient_created_by ON patients(created_by_id);"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_patient_is_active ON patients(is_active);"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_apt_start_time ON appointments(start_time);"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_apt_availability ON appointments(availability_id);"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_apt_created_by ON appointments(created_by_id);"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_apt_doctor_status ON appointments(doctor_id, status);"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_apt_org_status ON appointments(organization_id, status);"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_apt_patient_status ON appointments(patient_id, status);"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_apt_date_status ON appointments(appointment_date, status);"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_avail_org_booked ON availabilities(organization_id, is_booked);"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_avail_doctor_booked ON availabilities(doctor_id, is_booked);"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_session_date ON sessions(session_date);"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_session_appointment ON sessions(appointment_id);"))
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_session_created_by ON sessions(created_by_id);"))
+
         
-        await conn.execute(text("ALTER TABLE availabilities ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES users(id);"))
-        await conn.execute(text("ALTER TABLE availabilities ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITHOUT TIME ZONE;"))
-        await conn.execute(text("ALTER TABLE availabilities ADD COLUMN IF NOT EXISTS patient_name VARCHAR;"))
-        await conn.execute(text("ALTER TABLE availabilities ADD COLUMN IF NOT EXISTS doctor_name VARCHAR;"))
-        await conn.execute(text("ALTER TABLE availabilities ADD COLUMN IF NOT EXISTS organization_name VARCHAR;"))
-        await conn.execute(text("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS patient_name VARCHAR;"))
-        await conn.execute(text("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS patient_age INTEGER;"))
-        await conn.execute(text("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS doctor_name VARCHAR;"))
-        await conn.execute(text("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS booked_by_role VARCHAR;"))
         
     logger.info("Database tables and columns verified.")
     yield
@@ -96,6 +100,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 origins = [
     "http://localhost:5173",
     "http://localhost:8000",
+    #production server IP
+    "http://52.66.143.164",
 ]
 
 app.add_middleware(

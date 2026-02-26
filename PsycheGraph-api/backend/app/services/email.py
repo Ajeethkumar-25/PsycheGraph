@@ -57,3 +57,57 @@ PsycheGraph Team
         print(f"[EMAIL SENT] License key sent to {to_email}")
     except Exception as e:
         print(f"[WARNING] Email sending failed: {e}")
+
+
+def send_appointment_email(
+    to_email: str,
+    patient_name: str,
+    doctor_name: str,
+    doctor_id: int,
+    role: str,
+    appointment_date: str,
+    start_time: str,
+    end_time: str,
+    meet_link: str
+):
+    if not SMTP_USER or not SMTP_PASSWORD:
+        print(f"[EMAIL SKIP] No SMTP config. Appointment confirmation for {patient_name}")
+        return
+
+    subject = f"PsycheGraph — Appointment Confirmation"
+    body = f"""
+Dear {patient_name},
+
+Your appointment has been successfully booked on PsycheGraph!
+
+Appointment Details:
+─────────────────────────────
+Doctor Name   : Dr. {doctor_name}
+Booked By     : {role}
+Date          : {appointment_date}
+Start Time    : {start_time}
+End Time      : {end_time}
+Google Meet   : {meet_link if meet_link else "Will be shared shortly"}
+─────────────────────────────
+
+Please join the meeting on time using the link above.
+
+Regards,
+PsycheGraph Team
+"""
+
+    msg = MIMEMultipart()
+    msg["From"] = FROM_EMAIL
+    msg["To"] = to_email
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain"))
+
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(FROM_EMAIL, to_email, msg.as_string())
+        print(f"[EMAIL SENT] Appointment confirmation sent to {to_email}")
+    except Exception as e:
+        print(f"[EMAIL ERROR] Failed to send appointment email: {e}")
+        raise

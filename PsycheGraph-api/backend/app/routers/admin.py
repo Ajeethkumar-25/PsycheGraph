@@ -448,8 +448,6 @@ async def get_receptionist(
     if not user: raise HTTPException(status_code=404, detail="Receptionist not found")
     
     return user
-        
-    return user
 
 @receptionist_router.put("/{user_id}", response_model=schemas.UserOut)
 async def update_receptionist(

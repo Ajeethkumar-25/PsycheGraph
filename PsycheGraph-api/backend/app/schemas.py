@@ -1,6 +1,6 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, List, Union
-from datetime import datetime
+from datetime import datetime, date
 from .models import UserRole
 
 class Token(BaseModel):
@@ -96,11 +96,20 @@ class OrganizationOut(OrganizationBase):
 
 class PatientBase(BaseModel):
     full_name: str
-    date_of_birth: datetime
-    contact_number: str
+    date_of_birth: Optional[date] = None 
+    contact_number: Optional[str] = None
     email: Optional[str] = None
     gender: Optional[str] = None
     address: Optional[str] = None
+
+    @field_validator('date_of_birth', mode='before')
+    @classmethod
+    def parse_date_of_birth(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, datetime):
+            return v.date()   # ← strips the time part
+        return v
     
 class PatientCreate(PatientBase):
     organization_id: Optional[int] = None
@@ -154,7 +163,7 @@ class OrganizationUpdate(BaseModel):
 
 class PatientUpdate(BaseModel):
     full_name: Optional[str] = None
-    date_of_birth: Optional[datetime] = None
+    date_of_birth: Optional[date] = None
     contact_number: Optional[str] = None
     email: Optional[str] = None
     gender: Optional[str] = None
