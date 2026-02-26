@@ -265,6 +265,21 @@ export default function ReceptionistAppointments() {
 
             // 2. Book Appointment
             const selectedPatient = patients.find(p => p.id === parseInt(formData.patient_id));
+
+            let calcAge = null;
+            if (selectedPatient) {
+                if (selectedPatient.patient_age) {
+                    calcAge = parseInt(selectedPatient.patient_age, 10);
+                } else if (selectedPatient.date_of_birth) {
+                    const dob = new Date(selectedPatient.date_of_birth);
+                    if (!isNaN(dob.getTime())) {
+                        const ageDifMs = Date.now() - dob.getTime();
+                        const ageDate = new Date(ageDifMs);
+                        calcAge = Math.abs(ageDate.getUTCFullYear() - 1970);
+                    }
+                }
+            }
+
             const bookingPayload = {
                 patient_id: parseInt(formData.patient_id),
                 doctor_id: parseInt(formData.doctor_id),
@@ -273,7 +288,7 @@ export default function ReceptionistAppointments() {
                 notes: formData.notes,
                 meet_link: visitType === 'Video' ? formData.meet_link : null,
                 availability_id: slot.id,
-                patient_age: parseInt(selectedPatient?.patient_age || 0, 10)
+                patient_age: calcAge
             };
 
             await dispatch(createAppointment(bookingPayload)).unwrap();

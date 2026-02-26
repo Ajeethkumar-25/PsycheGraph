@@ -43,7 +43,7 @@ export default function DoctorPatients() {
     const itemsPerPage = 6;
 
     // Reschedule Modal State
-    const [rescheduleModal, setRescheduleModal] = useState({ isOpen: false, appointmentId: null, doctorId: null, date: '', time: '' });
+    const [rescheduleModal, setRescheduleModal] = useState({ isOpen: false, appointmentId: null, doctorId: null, patientAge: null, date: '', time: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Track booked slots for selected doctor on the selected date
@@ -143,10 +143,28 @@ export default function DoctorPatients() {
         const hh = String(d.getHours()).padStart(2, '0');
         const min = String(d.getMinutes()).padStart(2, '0');
 
+        let calcAge = app.patient_age;
+        if (calcAge == null) {
+            const tempPatient = patients.find(p => p.id === app.patient_id || p.full_name === app.patient_name);
+            if (tempPatient) {
+                if (tempPatient.patient_age) {
+                    calcAge = parseInt(tempPatient.patient_age, 10);
+                } else if (tempPatient.date_of_birth) {
+                    const dob = new Date(tempPatient.date_of_birth);
+                    if (!isNaN(dob.getTime())) {
+                        const ageDifMs = Date.now() - dob.getTime();
+                        const ageDate = new Date(ageDifMs);
+                        calcAge = Math.abs(ageDate.getUTCFullYear() - 1970);
+                    }
+                }
+            }
+        }
+
         setRescheduleModal({
             isOpen: true,
             appointmentId: app.id,
             doctorId: app.doctor_id || user?.id,
+            patientAge: calcAge,
             date: `${yyyy}-${mm}-${dd}`,
             time: `${hh}:${min}`
         });
@@ -177,11 +195,12 @@ export default function DoctorPatients() {
                 data: {
                     start_time: startDateTime.toISOString(),
                     end_time: endDateTime.toISOString(),
-                    new_availability_id: slot.id
+                    new_availability_id: slot.id,
+                    patient_age: rescheduleModal.patientAge
                 }
             })).unwrap();
 
-            setRescheduleModal({ isOpen: false, appointmentId: null, doctorId: null, date: '', time: '' });
+            setRescheduleModal({ isOpen: false, appointmentId: null, doctorId: null, patientAge: null, date: '', time: '' });
             dispatch(fetchAppointments()); // Fetch updated appointments list
         } catch (error) {
             console.error('Failed to reschedule:', error);

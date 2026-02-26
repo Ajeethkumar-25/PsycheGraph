@@ -64,7 +64,8 @@ export default function ReceptionistPatients() {
         gender: '',
         address: '',
         doctor_id: '',
-        organization_id: currentUser?.organization_id || 1
+        organization_id: currentUser?.organization_id || 1,
+        patient_age: ''
     });
 
     const [currentPage, setCurrentPage] = useState(1);
@@ -87,6 +88,7 @@ export default function ReceptionistPatients() {
                 ...dataToSubmit,
                 date_of_birth: formData.date_of_birth ? new Date(formData.date_of_birth).toISOString().split('T')[0] : null,
                 doctor_id: formData.doctor_id ? parseInt(formData.doctor_id) : null,
+                patient_age: formData.patient_age ? parseInt(formData.patient_age, 10) : null
             };
 
             if (isEditMode) {
@@ -94,7 +96,7 @@ export default function ReceptionistPatients() {
                 await dispatch(updatePatient({ id: editingPatientId, data: patientPayload })).unwrap();
                 alert('Patient details updated successfully');
             } else {
-                await dispatch(createPatient(formData)).unwrap();
+                await dispatch(createPatient({ ...patientPayload, organization_id: formData.organization_id })).unwrap();
                 alert('Patient registered successfully');
             }
 
@@ -118,7 +120,8 @@ export default function ReceptionistPatients() {
             gender: '',
             address: '',
             doctor_id: '',
-            organization_id: currentUser?.organization_id || 1
+            organization_id: currentUser?.organization_id || 1,
+            patient_age: ''
         });
         setIsEditMode(false);
         setEditingPatientId(null);
@@ -135,7 +138,8 @@ export default function ReceptionistPatients() {
             gender: patient.gender || '',
             address: patient.address || '',
             doctor_id: patient.doctor_id || '',
-            organization_id: patient.organization_id || currentUser?.organization_id || 1
+            organization_id: patient.organization_id || currentUser?.organization_id || 1,
+            patient_age: patient.patient_age || ''
         });
         setIsModalOpen(true);
     };
@@ -443,27 +447,20 @@ export default function ReceptionistPatients() {
                                     <div>
                                         <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Age</label>
                                         <div className="relative">
-                                            <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                            <User className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                                             <input
                                                 required
                                                 type="tel"
                                                 value={formData.patient_age}
                                                 onChange={(e) => {
                                                     const value = e.target.value.replace(/[^0-9]/g, '');
-                                                    if (value.length > 0 && !/^[6-9]/.test(value)) return;
-                                                    if (value.length <= 10) {
-                                                        setFormData({ ...formData, patient_age: value });
-                                                    }
+                                                    setFormData({ ...formData, patient_age: value });
                                                 }}
-                                                placeholder="enter your age "
+                                                placeholder="ENTER PATIENT'S AGE"
                                                 className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-slate-900 font-medium placeholder:text-slate-400"
                                             />
                                         </div>
                                     </div>
-                                    
-                                </div>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Gender</label>
                                         <div className="relative">
@@ -481,24 +478,25 @@ export default function ReceptionistPatients() {
                                             </select>
                                         </div>
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Assigned Doctor</label>
-                                        <div className="relative">
-                                            <Stethoscope className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                            <select
-                                                required
-                                                value={formData.doctor_id}
-                                                onChange={(e) => setFormData({ ...formData, doctor_id: e.target.value })}
-                                                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-slate-900 font-medium appearance-none"
-                                            >
-                                                <option value="">Select Doctor</option>
-                                                {displayDoctors.map(doc => (
-                                                    <option key={doc.id} value={doc.id}>
-                                                        Dr. {doc.full_name}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Assigned Doctor</label>
+                                    <div className="relative">
+                                        <Stethoscope className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                        <select
+                                            required
+                                            value={formData.doctor_id}
+                                            onChange={(e) => setFormData({ ...formData, doctor_id: e.target.value })}
+                                            className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-slate-900 font-medium appearance-none"
+                                        >
+                                            <option value="">Select Doctor</option>
+                                            {displayDoctors.map(doc => (
+                                                <option key={doc.id} value={doc.id}>
+                                                    Dr. {doc.full_name}
+                                                </option>
+                                            ))}
+                                        </select>
                                     </div>
                                 </div>
 
