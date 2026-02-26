@@ -33,13 +33,15 @@ export default function DoctorAppointments() {
         try {
             const startDateTime = new Date(`${formData.date}T${formData.time}`);
             const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
+            const selectedPatient = patients.find(p => p.id === parseInt(formData.patient_id));
 
             await dispatch(createAppointment({
                 patient_id: parseInt(formData.patient_id),
                 doctor_id: user.id, // Assign to self
                 start_time: startDateTime.toISOString(),
                 end_time: endDateTime.toISOString(),
-                notes: formData.notes
+                notes: formData.notes,
+                patient_age: parseInt(selectedPatient?.patient_age || 0, 10)
             })).unwrap();
             setIsModalOpen(false);
             setFormData({ patient_id: '', date: '', time: '', notes: '' });
@@ -122,8 +124,8 @@ export default function DoctorAppointments() {
                                         key={i}
                                         onClick={() => setCurrentPage(i + 1)}
                                         className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${currentPage === i + 1
-                                                ? "bg-primary-600 text-white shadow-md shadow-primary-200"
-                                                : "bg-white text-slate-600 border border-slate-200 hover:border-primary-300 hover:text-primary-600"
+                                            ? "bg-primary-600 text-white shadow-md shadow-primary-200"
+                                            : "bg-white text-slate-600 border border-slate-200 hover:border-primary-300 hover:text-primary-600"
                                             }`}
                                     >
                                         {i + 1}

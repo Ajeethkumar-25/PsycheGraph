@@ -264,6 +264,7 @@ export default function ReceptionistAppointments() {
             const slot = slotAction.payload;
 
             // 2. Book Appointment
+            const selectedPatient = patients.find(p => p.id === parseInt(formData.patient_id));
             const bookingPayload = {
                 patient_id: parseInt(formData.patient_id),
                 doctor_id: parseInt(formData.doctor_id),
@@ -271,7 +272,8 @@ export default function ReceptionistAppointments() {
                 end_time: endDateTime.toISOString(),
                 notes: formData.notes,
                 meet_link: visitType === 'Video' ? formData.meet_link : null,
-                availability_id: slot.id
+                availability_id: slot.id,
+                patient_age: parseInt(selectedPatient?.patient_age || 0, 10)
             };
 
             await dispatch(createAppointment(bookingPayload)).unwrap();

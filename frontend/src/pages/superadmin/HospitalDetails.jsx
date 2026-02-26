@@ -370,11 +370,11 @@ export default function HospitalDetails() {
                                         >
                                             <div className="w-full md:col-span-4 flex items-center gap-4">
                                                 <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center border-2 border-white shadow-sm ring-1 ring-slate-200">
-                                                    <span className="text-xl font-black text-slate-900">{(item.full_name || item.name || 'U')[0]}</span>
+                                                    <span className="text-xl font-black text-slate-900">{(item.full_name || item.name || item.patient_name || 'U')[0]}</span>
                                                 </div>
                                                 <div>
                                                     <p className="font-black text-slate-900 uppercase tracking-tight leading-none mb-2 group-hover:text-primary-600 transition-colors">
-                                                        {item.full_name || item.name}
+                                                        {item.full_name || item.name || item.patient_name || 'Unknown User'}
                                                     </p>
                                                     <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
                                                         ID: {item.id}
@@ -389,12 +389,12 @@ export default function HospitalDetails() {
                                                     </div>
                                                     {item.email || 'No email provided'}
                                                 </div>
-                                                {item.phone_number && (
+                                                {(item.phone_number || item.contact_number) && (
                                                     <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
                                                         <div className="p-1 rounded-lg bg-slate-50 text-slate-400">
                                                             <Phone size={14} />
                                                         </div>
-                                                        {item.phone_number}
+                                                        {item.phone_number || item.contact_number}
                                                     </div>
                                                 )}
                                             </div>

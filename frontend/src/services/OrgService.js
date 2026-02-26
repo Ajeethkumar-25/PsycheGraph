@@ -7,7 +7,7 @@ const OrgService = {
     },
 
     createOrganization: async (orgData) => {
-        const response = await api.post('/admin/organizations', orgData);
+        const response = await api.post('/admin/organizations/register', orgData);
         return response.data;
     },
 

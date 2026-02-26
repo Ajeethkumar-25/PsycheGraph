@@ -264,7 +264,6 @@ export default function SuperAdminDashboard() {
                         <div className="p-6 grid grid-cols-1 gap-4">
                             {[
                                 { label: 'Manage Organizations', icon: Building2, path: '/superadmin/organizations', color: 'blue' },
-                                { label: 'User Governance', icon: Users, path: '/superadmin/users', color: 'indigo' },
                                 { label: 'Hospital Intel', icon: Stethoscope, path: '/superadmin/hospitals', color: 'purple' }
                             ].map((action) => (
                                 <Link

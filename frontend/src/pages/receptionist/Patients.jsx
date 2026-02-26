@@ -315,8 +315,8 @@ export default function ReceptionistPatients() {
                                         key={i}
                                         onClick={() => setCurrentPage(i + 1)}
                                         className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${currentPage === i + 1
-                                                ? "bg-indigo-600 text-white shadow-md shadow-indigo-200"
-                                                : "bg-white text-slate-600 border border-slate-200 hover:border-indigo-300 hover:text-indigo-600"
+                                            ? "bg-indigo-600 text-white shadow-md shadow-indigo-200"
+                                            : "bg-white text-slate-600 border border-slate-200 hover:border-indigo-300 hover:text-indigo-600"
                                             }`}
                                     >
                                         {i + 1}
@@ -430,12 +430,37 @@ export default function ReceptionistPatients() {
                                             <input
                                                 required
                                                 type="date"
+                                                max={new Date(new Date().setDate(new Date().getDate() - 1)).toISOString().split('T')[0]}
                                                 value={formData.date_of_birth}
                                                 onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })}
                                                 className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-slate-900 font-medium"
                                             />
                                         </div>
                                     </div>
+
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Age</label>
+                                        <div className="relative">
+                                            <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                            <input
+                                                required
+                                                type="tel"
+                                                value={formData.patient_age}
+                                                onChange={(e) => {
+                                                    const value = e.target.value.replace(/[^0-9]/g, '');
+                                                    if (value.length > 0 && !/^[6-9]/.test(value)) return;
+                                                    if (value.length <= 10) {
+                                                        setFormData({ ...formData, patient_age: value });
+                                                    }
+                                                }}
+                                                placeholder="enter your age "
+                                                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-slate-900 font-medium placeholder:text-slate-400"
+                                            />
+                                        </div>
+                                    </div>
+                                    
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

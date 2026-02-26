@@ -145,23 +145,27 @@ export default function Layout() {
             <AnimatePresence>
                 {successMessage && (
                     <motion.div
-                        initial={{ opacity: 0, x: -20, y: 20 }}
-                        animate={{ opacity: 1, x: 0, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        className="fixed top-6 lg:top-8 left-6 lg:left-8 z-[100] p-4 bg-emerald-500/10 border-2 border-emerald-500/20 rounded-2xl flex items-center gap-3 shadow-2xl shadow-emerald-500/10 backdrop-blur-md"
+                        initial={{ opacity: 0, x: 50, scale: 0.9 }}
+                        animate={{ opacity: 1, x: 0, scale: 1 }}
+                        exit={{ opacity: 0, x: 20, scale: 0.9 }}
+                        transition={{ duration: 0.4, type: "spring", bounce: 0.4 }}
+                        className="fixed top-6 lg:top-8 right-6 lg:right-8 z-[100] p-4 bg-white border border-slate-100 rounded-2xl flex items-start gap-4 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] overflow-hidden min-w-[320px]"
                     >
-                        <div className="h-8 w-8 bg-emerald-500 text-white rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
-                            <CheckCircle2 size={18} />
+                        {/* Decorative side accent */}
+                        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-emerald-500" />
+
+                        <div className="h-10 w-10 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center shrink-0">
+                            <CheckCircle2 size={24} />
                         </div>
-                        <div>
-                            <p className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.2em] leading-none mb-1">System Message</p>
-                            <p className="text-sm font-black text-white uppercase tracking-tight">{successMessage}</p>
+                        <div className="pr-2 mt-0.5">
+                            <h4 className="text-base font-bold text-slate-800 tracking-tight leading-none mb-1.5">Success!</h4>
+                            <p className="text-sm font-medium text-slate-500 leading-tight">{successMessage}</p>
                         </div>
                         <button
                             onClick={() => dispatch(clearSuccessMessage())}
-                            className="ml-4 p-1 hover:bg-emerald-500/10 rounded-lg transition-colors text-emerald-400"
+                            className="ml-auto mt-0.5 p-1.5 hover:bg-slate-100 text-slate-400 hover:text-slate-600 rounded-xl transition-all flex-shrink-0"
                         >
-                            <X size={14} />
+                            <X size={16} strokeWidth={2.5} />
                         </button>
                     </motion.div>
                 )}
