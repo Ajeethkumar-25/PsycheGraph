@@ -138,22 +138,35 @@ async def update_patient(
 @router.delete("/{patient_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_patient(
     patient_id: int,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.HOSPITAL, models.UserRole.RECEPTIONIST])),
+    current_user: models.User = Depends(dependencies.require_role([
+        models.UserRole.HOSPITAL,
+        models.UserRole.RECEPTIONIST,
+        models.UserRole.SUPER_ADMIN
+    ])),
     db: AsyncSession = Depends(database.get_db)
 ):
     query = select(models.Patient).where(models.Patient.id == patient_id)
+
     if current_user.role == models.UserRole.SUPER_ADMIN:
-         pass
+        pass  # can delete any patient
+
     elif current_user.role == models.UserRole.HOSPITAL:
-         query = query.where(models.Patient.organization_id == current_user.organization_id)
-    else:
-         raise HTTPException(status_code=403, detail="Only Hospital Admins and Receptionists can delete patients")
-         
+        # can delete any patient in their organization
+        query = query.where(
+            models.Patient.organization_id == current_user.organization_id
+        )
+
+    elif current_user.role == models.UserRole.RECEPTIONIST:
+        # can delete patients in their organization
+        query = query.where(
+            models.Patient.organization_id == current_user.organization_id
+        )
+
     result = await db.execute(query)
     patient = result.scalars().first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
-        
+
     await db.delete(patient)
     await db.commit()
     return None

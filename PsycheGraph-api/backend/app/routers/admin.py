@@ -1,5 +1,5 @@
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
@@ -21,6 +21,7 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 @router.post("/organizations/register", response_model=schemas.OrganizationOut)
 async def register_organization(
     org: schemas.OrganizationCreate,
+    background_tasks: BackgroundTasks,        # ← added
     current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN])),
     db: AsyncSession = Depends(database.get_db)
 ):
@@ -52,19 +53,13 @@ async def register_organization(
         await db.rollback()
         raise HTTPException(status_code=400, detail=f"Registration failed: {str(e)}")
 
-    # ✅ ONLY THIS — async email, no duplicate
-    try:
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            executor,
-            lambda: send_license_key_email(
-                to_email=new_org.email,
-                org_name=new_org.name,
-                license_key=new_org.license_key
-            )
-        )
-    except Exception as e:
-        print(f"[WARNING] Email sending failed: {e}")
+    # ← Send email in background — response returns immediately
+    background_tasks.add_task(
+        send_license_key_email,
+        to_email=new_org.email,
+        org_name=new_org.name,
+        license_key=new_org.license_key
+    )
 
     return new_org
 

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload, joinedload
@@ -206,6 +206,7 @@ async def get_availability(
 @router.post("/book", response_model=schemas.AppointmentOut)
 async def book_appointment(
     booking: schemas.AppointmentCreate,
+    background_tasks: BackgroundTasks,        # ← added
     current_user: models.User = Depends(dependencies.get_current_user),
     db: AsyncSession = Depends(database.get_db)
 ):
@@ -222,28 +223,35 @@ async def book_appointment(
     if slot.is_booked:
         raise HTTPException(status_code=400, detail="Slot is already booked")
 
-    # Fetch Patient info for better meet link
-    patient_res = await db.execute(select(models.Patient).where(models.Patient.id == booking.patient_id))
+    # Fetch Patient info
+    patient_res = await db.execute(
+        select(models.Patient).where(models.Patient.id == booking.patient_id)
+    )
     patient = patient_res.scalars().first()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    # Generate Google Meet link — run in executor so it doesn't block the event loop
+    # Generate Google Meet link — with 5 second timeout  ← fix 2
     slot_start_ist = slot.start_time.replace(tzinfo=IST)
     slot_end_ist = slot.end_time.replace(tzinfo=IST)
-    
-    # ← REPLACED: now runs in thread pool instead of blocking directly
+
     try:
         loop = asyncio.get_event_loop()
-        meet_link = await loop.run_in_executor(
-            executor,
-            lambda: calendar_service.create_event(
-                summary=f"Appointment: {patient.full_name} with Dr. {slot.doctor.full_name if slot.doctor else 'Unknown'}",
-                start_time=slot_start_ist.astimezone(timezone.utc),
-                end_time=slot_end_ist.astimezone(timezone.utc),
-                attendee_email=patient.email or current_user.email
-            )
+        meet_link = await asyncio.wait_for(
+            loop.run_in_executor(
+                executor,
+                lambda: calendar_service.create_event(
+                    summary=f"Appointment: {patient.full_name} with Dr. {slot.doctor.full_name if slot.doctor else 'Unknown'}",
+                    start_time=slot_start_ist.astimezone(timezone.utc),
+                    end_time=slot_end_ist.astimezone(timezone.utc),
+                    attendee_email=patient.email or current_user.email
+                )
+            ),
+            timeout=5.0       # ← give up after 5 seconds, don't block
         )
+    except asyncio.TimeoutError:
+        print("[WARNING] Google Meet link timed out — saving without meet link")
+        meet_link = None
     except Exception as e:
         print(f"[WARNING] Google Meet link creation failed: {e}")
         meet_link = None
@@ -265,31 +273,25 @@ async def book_appointment(
         booked_by_role=current_user.role.value,
         created_by_id=current_user.id
     )
-    
+
     slot.is_booked = True
     db.add(new_app)
     await db.commit()
 
-    # Send confirmation email to patient
+    # Send email in background — response returns immediately  ← fix 3
     if patient.email:
-        try:
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                executor,
-                lambda: send_appointment_email(
-                    to_email=patient.email,
-                    patient_name=patient.full_name,
-                    doctor_name=slot.doctor.full_name if slot.doctor else "Unknown",
-                    doctor_id=slot.doctor_id,
-                    role=current_user.role.value,
-                    appointment_date=slot.start_time.strftime("%Y-%m-%d"),
-                    start_time=slot.start_time.strftime("%H:%M"),
-                    end_time=slot.end_time.strftime("%H:%M"),
-                    meet_link=meet_link or ""
-                )
-            )
-        except Exception as e:
-            print(f"[WARNING] Appointment email failed: {e}")
+        background_tasks.add_task(
+            send_appointment_email,
+            to_email=patient.email,
+            patient_name=patient.full_name,
+            doctor_name=slot.doctor.full_name if slot.doctor else "Unknown",
+            doctor_id=slot.doctor_id,
+            role=current_user.role.value,
+            appointment_date=slot.start_time.strftime("%Y-%m-%d"),
+            start_time=slot.start_time.strftime("%H:%M"),
+            end_time=slot.end_time.strftime("%H:%M"),
+            meet_link=meet_link or ""
+        )
 
     res = await db.execute(
         select(models.Appointment)
