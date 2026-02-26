@@ -162,18 +162,18 @@ async def batch_create_availability(
     
     await db.commit()
 
-    for slot in slots:
-        await db.refresh(slot)
-    
     result = await db.execute(
         select(models.Availability)
-        .options(
-            selectinload(models.Availability.doctor)
+        .options(selectinload(models.Availability.doctor))
+        .where(
+            models.Availability.doctor_id == target_doctor_id,
+            models.Availability.organization_id == org_id,
+            models.Availability.start_time >= slots[0].start_time,
+            models.Availability.start_time <= slots[-1].start_time
         )
-        .where(models.Availability.id.in_([s.id for s in slots]))
+        .order_by(models.Availability.start_time)
     )
     return result.scalars().all()
-
 
 @router.get("/availability", response_model=List[schemas.AvailabilityOut])
 async def get_availability(
@@ -228,19 +228,25 @@ async def book_appointment(
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    # Generate Google Meet link
+    # Generate Google Meet link — run in executor so it doesn't block the event loop
     slot_start_ist = slot.start_time.replace(tzinfo=IST)
     slot_end_ist = slot.end_time.replace(tzinfo=IST)
     
-    meet_link = calendar_service.create_event(
-        summary=f"Appointment: {patient.full_name} with Dr. {slot.doctor.full_name if slot.doctor else 'Unknown'}",
-        start_time=slot_start_ist.astimezone(timezone.utc),
-        end_time=slot_end_ist.astimezone(timezone.utc),
-        attendee_email=patient.email or current_user.email 
-    )
-    
-    if not meet_link:
-        pass
+    # ← REPLACED: now runs in thread pool instead of blocking directly
+    try:
+        loop = asyncio.get_event_loop()
+        meet_link = await loop.run_in_executor(
+            executor,
+            lambda: calendar_service.create_event(
+                summary=f"Appointment: {patient.full_name} with Dr. {slot.doctor.full_name if slot.doctor else 'Unknown'}",
+                start_time=slot_start_ist.astimezone(timezone.utc),
+                end_time=slot_end_ist.astimezone(timezone.utc),
+                attendee_email=patient.email or current_user.email
+            )
+        )
+    except Exception as e:
+        print(f"[WARNING] Google Meet link creation failed: {e}")
+        meet_link = None
 
     new_app = models.Appointment(
         patient_id=booking.patient_id,
@@ -264,7 +270,7 @@ async def book_appointment(
     db.add(new_app)
     await db.commit()
 
-    # ← Send confirmation email to patient
+    # Send confirmation email to patient
     if patient.email:
         try:
             loop = asyncio.get_event_loop()

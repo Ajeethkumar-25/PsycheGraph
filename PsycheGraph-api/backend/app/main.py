@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from sqlalchemy import text
+from fastapi.responses import JSONResponse
 
 from .database import engine, Base
 from .routers import auth, admin, patients, sessions, appointments, stats
@@ -22,6 +23,22 @@ async def lifespan(app: FastAPI):
     # Startup: Create tables and ensure columns exist
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        #COLUMN MIGRATIONS FIRST
+        await conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS email VARCHAR;"))
+        await conn.execute(text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS is_approved BOOLEAN DEFAULT FALSE;"))
+        await conn.execute(text("ALTER TABLE organizations ALTER COLUMN license_key DROP NOT NULL;"))
+        await conn.execute(text("ALTER TABLE availabilities ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);"))
+        await conn.execute(text("ALTER TABLE availabilities ADD COLUMN IF NOT EXISTS created_by_id INTEGER REFERENCES users(id);"))
+        await conn.execute(text("ALTER TABLE availabilities ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITHOUT TIME ZONE;"))
+        await conn.execute(text("ALTER TABLE availabilities ADD COLUMN IF NOT EXISTS patient_name VARCHAR;"))
+        await conn.execute(text("ALTER TABLE availabilities ADD COLUMN IF NOT EXISTS doctor_name VARCHAR;"))
+        await conn.execute(text("ALTER TABLE availabilities ADD COLUMN IF NOT EXISTS organization_name VARCHAR;"))
+        await conn.execute(text("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);"))
+        await conn.execute(text("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS patient_name VARCHAR;"))
+        await conn.execute(text("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS patient_age INTEGER;"))
+        await conn.execute(text("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS doctor_name VARCHAR;"))
+        await conn.execute(text("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS booked_by_role VARCHAR;"))
         
         # Ensure new columns exist (Migration logic)
         await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_org_email ON organizations(email);"))
@@ -85,7 +102,6 @@ async def log_requests(request: Request, call_next):
             content={"message": "Internal Server Error", "details": str(exc)},
         )
 
-from fastapi.responses import JSONResponse
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
