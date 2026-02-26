@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchPatients, deletePatient } from '../../store/slices/PatientSlice';
-import { fetchAppointments, rescheduleAppointment } from '../../store/slices/AppointmentSlice';
+import { fetchAppointments, rescheduleAppointment, createAvailability } from '../../store/slices/AppointmentSlice';
 import { Search, PlayCircle, Trash2, FileText, Database, ChevronLeft, ChevronRight, Edit3, X } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -36,13 +36,14 @@ export default function DoctorPatients() {
     const dispatch = useDispatch();
     const { list: patients, loading } = useSelector((state) => state.patients);
     const { list: appointments } = useSelector((state) => state.appointments);
+    const { user } = useSelector((state) => state.auth);
     const [searchQuery, setSearchQuery] = useState('');
 
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 6;
 
     // Reschedule Modal State
-    const [rescheduleModal, setRescheduleModal] = useState({ isOpen: false, appointmentId: null, date: '', time: '' });
+    const [rescheduleModal, setRescheduleModal] = useState({ isOpen: false, appointmentId: null, doctorId: null, date: '', time: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Track booked slots for selected doctor on the selected date
@@ -145,6 +146,7 @@ export default function DoctorPatients() {
         setRescheduleModal({
             isOpen: true,
             appointmentId: app.id,
+            doctorId: app.doctor_id || user?.id,
             date: `${yyyy}-${mm}-${dd}`,
             time: `${hh}:${min}`
         });
@@ -157,19 +159,33 @@ export default function DoctorPatients() {
             const startDateTime = new Date(`${rescheduleModal.date}T${rescheduleModal.time}`);
             const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // Assuming 1 hr
 
+            // 1. Create New Availability Slot
+            const slotAction = await dispatch(createAvailability({
+                doctor_id: rescheduleModal.doctorId,
+                start_time: startDateTime.toISOString(),
+                end_time: endDateTime.toISOString()
+            }));
+
+            if (createAvailability.rejected.match(slotAction)) {
+                throw new Error(slotAction.payload || "Failed to create new time slot");
+            }
+            const slot = slotAction.payload;
+
+            // 2. Reschedule Appointment
             await dispatch(rescheduleAppointment({
                 id: rescheduleModal.appointmentId,
                 data: {
                     start_time: startDateTime.toISOString(),
-                    end_time: endDateTime.toISOString()
+                    end_time: endDateTime.toISOString(),
+                    new_availability_id: slot.id
                 }
             })).unwrap();
 
-            setRescheduleModal({ isOpen: false, appointmentId: null, date: '', time: '' });
-            dispatch(fetchAppointments()); // Refresh appointments list
+            setRescheduleModal({ isOpen: false, appointmentId: null, doctorId: null, date: '', time: '' });
+            dispatch(fetchAppointments()); // Fetch updated appointments list
         } catch (error) {
             console.error('Failed to reschedule:', error);
-            alert('Failed to reschedule. Please try again.');
+            alert(`Failed to reschedule: ${error.message || 'Please try again.'}`);
         } finally {
             setIsSubmitting(false);
         }
@@ -205,6 +221,7 @@ export default function DoctorPatients() {
                                 <th className="px-6 py-4 whitespace-nowrap text-sm">Date of Birth</th>
                                 <th className="px-6 py-4 whitespace-nowrap text-sm">Phone</th>
                                 <th className="px-6 py-4 whitespace-nowrap text-sm">Session</th>
+                                <th className="px-6 py-4 whitespace-nowrap text-sm">Meet Link</th>
                                 <th className="px-6 py-4 whitespace-nowrap text-sm">Reschedule</th>
 
                             </tr>
@@ -217,7 +234,11 @@ export default function DoctorPatients() {
 
                                 return currentItems.map(patient => {
                                     const nextApp = appointments
-                                        .filter(a => (a.patient_id === patient.id || a.patient_name === patient.full_name) && a.status === 'SCHEDULED')
+                                        .filter(a => {
+                                            const matchesPatient = String(a.patient_id) === String(patient.id) || a.patient_name === patient.full_name;
+                                            const isActive = a.status === 'SCHEDULED' || a.status === 'RESCHEDULED' || a.status === 'CONFIRMED' || !a.status;
+                                            return matchesPatient && isActive;
+                                        })
                                         .sort((a, b) => new Date(a.start_time) - new Date(b.start_time))[0];
 
                                     return (
@@ -250,6 +271,21 @@ export default function DoctorPatients() {
                                                     </div>
                                                 ) : (
                                                     <span className="text-sm text-slate-400">No session</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {(nextApp && nextApp.meet_link) ? (
+                                                    <a
+                                                        href={nextApp.meet_link}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors inline-block"
+                                                        title="Join Google Meet"
+                                                    >
+                                                        <PlayCircle size={20} className="text-indigo-600 hover:text-indigo-800" />
+                                                    </a>
+                                                ) : (
+                                                    <span className="text-sm text-slate-400">--</span>
                                                 )}
                                             </td>
                                             <td className="px-6 py-4">
