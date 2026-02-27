@@ -9,10 +9,19 @@ from googleapiclient.errors import HttpError
 # Google Calendar scope
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_file_))))
-CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
-TOKEN_PATH = os.path.join(BASE_DIR, "token.json")
 
+if os.name == "Windows":
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_file_))))
+    CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
+    TOKEN_PATH = os.path.join(BASE_DIR, "token.json")
+elif os.name == "linux":
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
+    TOKEN_PATH = os.path.join(BASE_DIR, "token.json")
+else:
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
+    TOKEN_PATH = os.path.join(BASE_DIR, "token.json")
 
 class GoogleCalendarService:
     def _init_(self):
