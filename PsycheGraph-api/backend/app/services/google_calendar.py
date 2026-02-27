@@ -171,3 +171,5 @@ class GoogleCalendarService:
         except Exception as e:
             print("Unknown calendar error:", e)
             return None
+
+
