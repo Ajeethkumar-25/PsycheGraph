@@ -11,7 +11,7 @@ SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 
 if os.name == "Windows":
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_file_))))
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
     TOKEN_PATH = os.path.join(BASE_DIR, "token.json")
 elif os.name == "linux":
@@ -24,7 +24,7 @@ else:
     TOKEN_PATH = os.path.join(BASE_DIR, "token.json")
 
 class GoogleCalendarService:
-    def _init_(self):
+    def __init__(self):
         self.creds = None
         self.service = None
         self._authenticate()
@@ -171,5 +171,8 @@ class GoogleCalendarService:
         except Exception as e:
             print("Unknown calendar error:", e)
             return None
+
+
+google_calendar_service = GoogleCalendarService()
 
 
