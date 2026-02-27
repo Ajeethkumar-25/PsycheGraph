@@ -9,13 +9,13 @@ from googleapiclient.errors import HttpError
 # Google Calendar scope
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_file_))))
 CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
 TOKEN_PATH = os.path.join(BASE_DIR, "token.json")
 
 
 class GoogleCalendarService:
-    def __init__(self):
+    def _init_(self):
         self.creds = None
         self.service = None
         self._authenticate()
@@ -25,13 +25,18 @@ class GoogleCalendarService:
 
         # Load existing token
         if os.path.exists(TOKEN_PATH):
-            self.creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
+            self.creds = Credentials.from_authorized_user_file(
+                TOKEN_PATH,
+                SCOPES
+            )
 
         # Refresh token if expired
         if self.creds and self.creds.expired and self.creds.refresh_token:
             try:
+                print("Refreshing Google token...")
                 self.creds.refresh(Request())
-            except Exception:
+            except Exception as e:
+                print("Token refresh failed:", e)
                 self.creds = None
 
         # If no valid credentials → login
@@ -60,6 +65,7 @@ class GoogleCalendarService:
                 credentials=self.creds
             )
             print("Google Calendar connected successfully")
+
         except Exception as e:
             print("Calendar build error:", e)
 
@@ -71,7 +77,7 @@ class GoogleCalendarService:
         attendee_email: str | None = None,
     ) -> str | None:
         """
-        Create Google Calendar event with Meet link
+        Create Google Calendar event with Google Meet link
         """
 
         if not self.service:
@@ -84,6 +90,8 @@ class GoogleCalendarService:
 
         if end_time.tzinfo is None:
             end_time = end_time.replace(tzinfo=datetime.timezone.utc)
+
+        request_id = f"psychegraph-{int(datetime.datetime.utcnow().timestamp())}"
 
         event_body = {
             "summary": summary,
@@ -98,7 +106,7 @@ class GoogleCalendarService:
             },
             "conferenceData": {
                 "createRequest": {
-                    "requestId": f"psychegraph-{int(start_time.timestamp())}",
+                    "requestId": request_id,
                     "conferenceSolutionKey": {
                         "type": "hangoutsMeet"
                     },
@@ -108,7 +116,9 @@ class GoogleCalendarService:
 
         # Add attendee if exists
         if attendee_email:
-            event_body["attendees"] = [{"email": attendee_email}]
+            event_body["attendees"] = [
+                {"email": attendee_email}
+            ]
 
         try:
             event = (
@@ -117,20 +127,38 @@ class GoogleCalendarService:
                     calendarId="primary",
                     body=event_body,
                     conferenceDataVersion=1,
+                    sendUpdates="all",
                 )
                 .execute()
             )
 
-            meet_link = (
-                event.get("conferenceData", {})
-                .get("entryPoints", [{}])[0]
-                .get("uri")
-            )
+            print("Full Google event response:", event)
+
+            # -----------------------------
+            # SAFE MEET LINK EXTRACTION
+            # -----------------------------
+            meet_link = None
+
+            conference = event.get("conferenceData")
+
+            if conference:
+                entry_points = conference.get("entryPoints", [])
+                for entry in entry_points:
+                    if entry.get("entryPointType") == "video":
+                        meet_link = entry.get("uri")
+
+            if not meet_link:
+                print("WARNING: Meet link not generated")
 
             print("Meet link created:", meet_link)
             return meet_link
 
         except HttpError as error:
-            print(f"Google Calendar error status: {error.resp.status}")
-            print(f"Google Calendar error content: {error.content.decode()}")
+            print("Google Calendar API ERROR")
+            print("Status:", error.resp.status)
+            print("Content:", error.content.decode())
+            return None
+
+        except Exception as e:
+            print("Unknown calendar error:", e)
             return None
