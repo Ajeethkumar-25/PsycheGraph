@@ -1,92 +1,114 @@
 from pydantic import BaseModel, EmailStr, field_validator
-from typing import Optional, List, Union
+from typing import Optional, List
 from datetime import datetime, date
 from .models import UserRole
+
 
 class Token(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str
 
+
 class TokenRefresh(BaseModel):
     refresh_token: str
+
 
 class TokenData(BaseModel):
     email: Optional[str] = None
 
+
 class UserBase(BaseModel):
     email: EmailStr
-    full_name: str
+    full_name: Optional[str] = None
     role: UserRole
     is_active: Optional[bool] = True
+
 
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
+
 class UserCreate(UserBase):
     password: str
     organization_id: int
+
 
 class UserOut(UserBase):
     id: int
     organization_id: Optional[int] = None
     specialization: Optional[str] = None
-    license_key: Optional[str] = None
     shift_timing: Optional[str] = None
-    doctor_id: Optional[int] = None
+    doctor_id: Optional[int] = None        # For DOCTOR: same as their user id
+    doctor_ids: Optional[List[int]] = []   # For RECEPTIONIST: list of linked doctor user IDs
     doctor_name: Optional[str] = None
 
-    
     class Config:
         from_attributes = True
+
 
 class UserWithToken(UserOut):
     access_token: str
     refresh_token: str
     token_type: str
 
+
+# -------------------------------------------------------------------
 # Registration Schemas
-class RegistrationBase(BaseModel):
+# -------------------------------------------------------------------
+
+class HospitalRegister(BaseModel):
     email: EmailStr
     password: str
     full_name: str
-    license_key: str
+    license_key: str  # Hospital still needs license key to join org
 
-class HospitalRegister(RegistrationBase):
-    pass
 
-class DoctorRegister(RegistrationBase):
+class DoctorRegister(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: str
     specialization: str
+    receptionist_ids: Optional[List[int]] = []
+    # No license_key — doctor is created by hospital admin already in the org
 
-class ReceptionistRegister(RegistrationBase):
-    doctor_id: Optional[int] = None
-    specialization: str
+
+class ReceptionistRegister(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: str
+    specialization: Optional[str] = None
     shift_timing: str
+    doctor_ids: Optional[List[int]] = []   # IDs of doctors (user IDs) to link
+
 
 class RegisterResponse(BaseModel):
     message: str
     user_id: int
     organization_id: int
 
+
 class OrganizationBase(BaseModel):
     name: str
     license_key: Optional[str] = None
 
+
 class OrganizationCreate(BaseModel):
     name: str
     email: EmailStr
-    license_key: str
+    license_key: str  # Only org registration needs license key
+
 
 class OrganizationOut(OrganizationBase):
     id: int
     name: str
-    email: Optional[str] = None 
+    email: Optional[str] = None
     license_key: Optional[str] = None
-    is_approved: Optional[bool] = False   
+    is_approved: Optional[bool] = False
     is_active: bool
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
         json_encoders = {
@@ -96,7 +118,7 @@ class OrganizationOut(OrganizationBase):
 
 class PatientBase(BaseModel):
     full_name: str
-    date_of_birth: Optional[date] = None 
+    date_of_birth: Optional[date] = None
     contact_number: Optional[str] = None
     email: Optional[str] = None
     gender: Optional[str] = None
@@ -108,32 +130,37 @@ class PatientBase(BaseModel):
         if v is None:
             return None
         if isinstance(v, datetime):
-            return v.date()   # ← strips the time part
+            return v.date()
         return v
-    
+
+
 class PatientCreate(PatientBase):
     organization_id: Optional[int] = None
-    doctor_id: Optional[int] = None
+    doctor_id: Optional[int] = None  # user ID of the doctor
+
 
 class PatientOut(PatientBase):
     id: int
     organization_id: Optional[int]
     doctor_id: Optional[int]
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
         json_encoders = {
             datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S")
         }
 
+
 class SessionBase(BaseModel):
     patient_id: int
-    doctor_id: int
+    doctor_id: int   # user ID of the doctor
     date: datetime
+
 
 class SessionCreate(SessionBase):
     pass
+
 
 class SessionOut(SessionBase):
     id: int
@@ -142,12 +169,13 @@ class SessionOut(SessionBase):
     soap_note: Optional[str]
     summary: Optional[str]
     version: int
-    
+
     class Config:
         from_attributes = True
         json_encoders = {
             datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S")
         }
+
 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
@@ -155,11 +183,14 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     organization_id: Optional[int] = None
     password: Optional[str] = None
+    doctor_ids: Optional[List[int]] = None  # For updating receptionist ↔ doctor links
+
 
 class OrganizationUpdate(BaseModel):
     name: Optional[str] = None
     license_key: Optional[str] = None
     is_active: Optional[bool] = None
+
 
 class PatientUpdate(BaseModel):
     full_name: Optional[str] = None
@@ -168,18 +199,21 @@ class PatientUpdate(BaseModel):
     email: Optional[str] = None
     gender: Optional[str] = None
     address: Optional[str] = None
-    doctor_id: Optional[int] = None
+    doctor_id: Optional[int] = None  # user ID of the doctor
+
 
 class AvailabilityBase(BaseModel):
     start_time: datetime
     end_time: datetime
 
+
 class AvailabilityCreate(AvailabilityBase):
-    doctor_id: int
+    doctor_id: int       # user ID of the doctor
     organization_id: Optional[int] = None
 
+
 class AvailabilityBatchCreate(BaseModel):
-    doctor_id: int
+    doctor_id: int       # user ID of the doctor
     organization_id: Optional[int] = None
     start_time: datetime
     end_time: datetime
@@ -192,7 +226,7 @@ class AvailabilityOut(AvailabilityBase):
     doctor_name: Optional[str] = None
     patient_name: Optional[str] = None
     patient_age: Optional[int] = None
-    booked_by_role: Optional[str] = None 
+    booked_by_role: Optional[str] = None
     organization_id: int
     is_booked: bool
 
@@ -202,17 +236,20 @@ class AvailabilityOut(AvailabilityBase):
             datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S")
         }
 
+
 class AppointmentBase(BaseModel):
     patient_id: int
-    doctor_id: int
+    doctor_id: int       # user ID of the doctor
     start_time: datetime
     end_time: datetime
     notes: Optional[str] = None
     meet_link: Optional[str] = None
 
+
 class AppointmentCreate(AppointmentBase):
-    availability_id: int # The slot being booked
+    availability_id: int
     patient_age: Optional[int] = None
+
 
 class AppointmentOut(AppointmentBase):
     id: int
@@ -229,13 +266,16 @@ class AppointmentOut(AppointmentBase):
             datetime: lambda v: v.strftime("%Y-%m-%d %H:%M:%S")
         }
 
+
 class AppointmentUpdate(BaseModel):
     status: Optional[str] = None
     notes: Optional[str] = None
     meet_link: Optional[str] = None
 
+
 class AppointmentReschedule(BaseModel):
     new_availability_id: int
+
 
 class SessionUpdate(BaseModel):
     transcript: Optional[str] = None

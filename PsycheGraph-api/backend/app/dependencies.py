@@ -3,12 +3,11 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import get_db
-from .models import User, UserRole
+from .models import User, UserRole, Receptionist
 from .auth import SECRET_KEY, ALGORITHM
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
-# Changed from OAuth2PasswordBearer to HTTPBearer for manual token handling
 security = HTTPBearer()
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: AsyncSession = Depends(get_db)):
@@ -25,18 +24,17 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    
-    # Use selectinload for async relationship loading
+
     result = await db.execute(
         select(User)
         .options(
-            selectinload(User.doctor_profile), 
-            selectinload(User.receptionist_profile)
+            selectinload(User.doctor_profile),
+            selectinload(User.receptionist_profile).selectinload(Receptionist.doctors)
         )
         .where(User.email == email)
     )
     user = result.scalars().first()
-    
+
     if user is None:
         raise credentials_exception
     return user

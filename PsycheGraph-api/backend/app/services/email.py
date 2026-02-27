@@ -9,8 +9,8 @@ load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
-SMTP_USER = os.getenv("SMTP_USER")       # your Gmail address
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")  # your Gmail app password
+SMTP_USER = os.getenv("SMTP_USER")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 FROM_EMAIL = os.getenv("FROM_EMAIL", SMTP_USER)
 
 print(f"[EMAIL CONFIG] SMTP_HOST={SMTP_HOST}")
@@ -20,11 +20,30 @@ print(f"[EMAIL CONFIG] SMTP_PASSWORD={'SET' if SMTP_PASSWORD else 'NOT SET'}")
 print(f"[EMAIL CONFIG] FROM_EMAIL={FROM_EMAIL}")
 
 
-def send_license_key_email(to_email: str, org_name: str, license_key: str):
+def _send(to_email: str, subject: str, body: str):
+    """Internal helper — sends an email. Never raises, always logs."""
     if not SMTP_USER or not SMTP_PASSWORD:
-        print(f"[EMAIL SKIP] No SMTP config. License key for {org_name}: {license_key}")
+        print(f"[EMAIL SKIP] No SMTP config. Would send to {to_email}: {subject}")
         return
 
+    msg = MIMEMultipart()
+    msg["From"] = FROM_EMAIL
+    msg["To"] = to_email
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain"))
+
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(FROM_EMAIL, to_email, msg.as_string())
+        print(f"[EMAIL SENT] To={to_email} Subject={subject}")
+    except Exception as e:
+        print(f"[EMAIL ERROR] Failed to send to {to_email}: {e}")
+
+
+def send_license_key_email(to_email: str, org_name: str, license_key: str):
+    """Sent to organization email when org is registered."""
     subject = f"PsycheGraph — Your License Key for {org_name}"
     body = f"""
 Dear {org_name} Team,
@@ -35,28 +54,13 @@ Your License Key is:
 
     {license_key}
 
-Use this key to register doctors and receptionists under your organization.
-
+Use this key when Hospital Admins log in to join your organization.
 Please keep this key secure and do not share it publicly.
 
 Regards,
 PsycheGraph Team
 """
-
-    msg = MIMEMultipart()
-    msg["From"] = FROM_EMAIL
-    msg["To"] = to_email
-    msg["Subject"] = subject
-    msg.attach(MIMEText(body, "plain"))
-
-    try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASSWORD)
-            server.sendmail(FROM_EMAIL, to_email, msg.as_string())
-        print(f"[EMAIL SENT] License key sent to {to_email}")
-    except Exception as e:
-        print(f"[WARNING] Email sending failed: {e}")
+    _send(to_email, subject, body)
 
 
 def send_appointment_email(
@@ -70,11 +74,12 @@ def send_appointment_email(
     end_time: str,
     meet_link: str
 ):
-    if not SMTP_USER or not SMTP_PASSWORD:
-        print(f"[EMAIL SKIP] No SMTP config. Appointment confirmation for {patient_name}")
-        return
-
-    subject = f"PsycheGraph — Appointment Confirmation"
+    """
+    Booking confirmation — sent when appointment is created.
+    Change 3: meet link is NOT included here anymore.
+              The link will be sent separately 30 minutes before the meeting.
+    """
+    subject = "PsycheGraph — Appointment Confirmation"
     body = f"""
 Dear {patient_name},
 
@@ -87,27 +92,49 @@ Booked By     : {role}
 Date          : {appointment_date}
 Start Time    : {start_time}
 End Time      : {end_time}
-Google Meet   : {meet_link if meet_link else "Will be shared shortly"}
 ─────────────────────────────
 
-Please join the meeting on time using the link above.
+You will receive the Google Meet link 30 minutes before your appointment.
 
 Regards,
 PsycheGraph Team
 """
+    _send(to_email, subject, body)
 
-    msg = MIMEMultipart()
-    msg["From"] = FROM_EMAIL
-    msg["To"] = to_email
-    msg["Subject"] = subject
-    msg.attach(MIMEText(body, "plain"))
 
-    try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASSWORD)
-            server.sendmail(FROM_EMAIL, to_email, msg.as_string())
-        print(f"[EMAIL SENT] Appointment confirmation sent to {to_email}")
-    except Exception as e:
-        print(f"[EMAIL ERROR] Failed to send appointment email: {e}")
-        raise
+def send_meet_link_email(
+    to_email: str,
+    recipient_name: str,
+    doctor_name: str,
+    appointment_date: str,
+    start_time: str,
+    end_time: str,
+    meet_link: str
+):
+    """
+    Change 3: Meet link reminder — sent to BOTH patient and doctor
+              exactly 30 minutes before the appointment starts.
+    """
+    subject = "PsycheGraph — Your Appointment Starts in 30 Minutes"
+    body = f"""
+Dear {recipient_name},
+
+Your appointment with Dr. {doctor_name} is starting in 30 minutes!
+
+Appointment Details:
+─────────────────────────────
+Doctor Name   : Dr. {doctor_name}
+Date          : {appointment_date}
+Start Time    : {start_time}
+End Time      : {end_time}
+─────────────────────────────
+
+Join your Google Meet session here:
+{meet_link}
+
+Please join the meeting on time.
+
+Regards,
+PsycheGraph Team
+"""
+    _send(to_email, subject, body)

@@ -1,178 +1,107 @@
-import os
-import datetime
-from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
+import os
+import uuid
+from datetime import datetime
 
-# Google Calendar scope
-SCOPES = ["https://www.googleapis.com/auth/calendar"]
+SCOPES = ['https://www.googleapis.com/auth/calendar']
 
-
-if os.name == "Windows":
+if os.name == "windows":
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
     TOKEN_PATH = os.path.join(BASE_DIR, "token.json")
+    CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
 elif os.name == "linux":
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
     TOKEN_PATH = os.path.join(BASE_DIR, "token.json")
+    CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
 else:
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
     TOKEN_PATH = os.path.join(BASE_DIR, "token.json")
+    CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
+
+# ← Cache the service globally so build() is only called once
+_cached_service = None
 
 class GoogleCalendarService:
     def __init__(self):
-        self.creds = None
-        self.service = None
-        self._authenticate()
+        self.service = self._get_service()
 
-    def _authenticate(self):
-        """Authenticate with Google Calendar API"""
+    def _get_service(self):
+        global _cached_service
 
-        # Load existing token
+        # Return cached service if available
+        if _cached_service is not None:
+            return _cached_service
+
+        creds = None
         if os.path.exists(TOKEN_PATH):
-            self.creds = Credentials.from_authorized_user_file(
-                TOKEN_PATH,
-                SCOPES
-            )
+            creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
 
-        # Refresh token if expired
-        if self.creds and self.creds.expired and self.creds.refresh_token:
-            try:
-                print("Refreshing Google token...")
-                self.creds.refresh(Request())
-            except Exception as e:
-                print("Token refresh failed:", e)
-                self.creds = None
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+            with open(TOKEN_PATH, 'w') as token:
+                token.write(creds.to_json())
 
-        # If no valid credentials → login
-        if not self.creds or not self.creds.valid:
-            if not os.path.exists(CREDENTIALS_PATH):
-                print("ERROR: credentials.json not found")
-                return
+        if not creds or not creds.valid:
+            raise Exception("Google Calendar credentials invalid. Run generate_token.py again.")
 
-            flow = InstalledAppFlow.from_client_secrets_file(
-                CREDENTIALS_PATH,
-                SCOPES
-            )
+        # ← cache=discovery_url avoids HTTP call on every build()
+        _cached_service = build(
+            'calendar', 'v3',
+            credentials=creds,
+            cache_discovery=False   # ← prevents file cache warnings on server
+        )
+        return _cached_service
 
-            print("Login required for Google Calendar...")
-            self.creds = flow.run_local_server(port=0)
-
-            # Save token
-            with open(TOKEN_PATH, "w") as token:
-                token.write(self.creds.to_json())
-
-        # Build service
+    def create_event(self, summary: str, start_time: datetime, end_time: datetime, attendee_email: str = None):
         try:
-            self.service = build(
-                "calendar",
-                "v3",
-                credentials=self.creds
-            )
-            print("Google Calendar connected successfully")
-
-        except Exception as e:
-            print("Calendar build error:", e)
-
-    def create_event(
-        self,
-        summary: str,
-        start_time: datetime.datetime,
-        end_time: datetime.datetime,
-        attendee_email: str | None = None,
-    ) -> str | None:
-        """
-        Create Google Calendar event with Google Meet link
-        """
-
-        if not self.service:
-            print("Calendar service not initialized")
-            return None
-
-        # Ensure UTC timezone
-        if start_time.tzinfo is None:
-            start_time = start_time.replace(tzinfo=datetime.timezone.utc)
-
-        if end_time.tzinfo is None:
-            end_time = end_time.replace(tzinfo=datetime.timezone.utc)
-
-        request_id = f"psychegraph-{int(datetime.datetime.utcnow().timestamp())}"
-
-        event_body = {
-            "summary": summary,
-            "description": "Appointment via PsycheGraph",
-            "start": {
-                "dateTime": start_time.isoformat(),
-                "timeZone": "UTC",
-            },
-            "end": {
-                "dateTime": end_time.isoformat(),
-                "timeZone": "UTC",
-            },
-            "conferenceData": {
-                "createRequest": {
-                    "requestId": request_id,
-                    "conferenceSolutionKey": {
-                        "type": "hangoutsMeet"
-                    },
-                }
-            },
-        }
-
-        # Add attendee if exists
-        if attendee_email:
-            event_body["attendees"] = [
-                {"email": attendee_email}
-            ]
-
-        try:
-            event = (
-                self.service.events()
-                .insert(
-                    calendarId="primary",
-                    body=event_body,
-                    conferenceDataVersion=1,
-                    sendUpdates="all",
+            # ← Refresh credentials if expired before each event creation
+            creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
+            if creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+                with open(TOKEN_PATH, 'w') as token:
+                    token.write(creds.to_json())
+                # rebuild service with fresh creds
+                global _cached_service
+                _cached_service = build(
+                    'calendar', 'v3',
+                    credentials=creds,
+                    cache_discovery=False
                 )
-                .execute()
-            )
+                self.service = _cached_service
 
-            print("Full Google event response:", event)
+            event = {
+                'summary': summary,
+                'start': {
+                    'dateTime': start_time.isoformat(),
+                    'timeZone': 'UTC',
+                },
+                'end': {
+                    'dateTime': end_time.isoformat(),
+                    'timeZone': 'UTC',
+                },
+                'conferenceData': {
+                    'createRequest': {
+                        'requestId': str(uuid.uuid4()),
+                        'conferenceSolutionKey': {'type': 'hangoutsMeet'}
+                    }
+                }
+            }
 
-            # -----------------------------
-            # SAFE MEET LINK EXTRACTION
-            # -----------------------------
-            meet_link = None
+            if attendee_email:
+                event['attendees'] = [{'email': attendee_email}]
 
-            conference = event.get("conferenceData")
+            result = self.service.events().insert(
+                calendarId='primary',
+                body=event,
+                conferenceDataVersion=1,
+                sendUpdates='all' if attendee_email else 'none'
+            ).execute()
 
-            if conference:
-                entry_points = conference.get("entryPoints", [])
-                for entry in entry_points:
-                    if entry.get("entryPointType") == "video":
-                        meet_link = entry.get("uri")
-
-            if not meet_link:
-                print("WARNING: Meet link not generated")
-
-            print("Meet link created:", meet_link)
+            meet_link = result.get('hangoutLink')
             return meet_link
 
-        except HttpError as error:
-            print("Google Calendar API ERROR")
-            print("Status:", error.resp.status)
-            print("Content:", error.content.decode())
-            return None
-
         except Exception as e:
-            print("Unknown calendar error:", e)
+            print(f"[GOOGLE CALENDAR ERROR] {e}")
             return None
-
-
-google_calendar_service = GoogleCalendarService()
-
-

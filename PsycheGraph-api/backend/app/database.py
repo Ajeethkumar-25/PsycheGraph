@@ -39,3 +39,5 @@ async def get_db():
         yield session
 
 print("DATABASE_URL:", DATABASE_URL)
+
+
