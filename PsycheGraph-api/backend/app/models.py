@@ -67,16 +67,10 @@ class User(Base):
     # Shared profile field
     full_name = Column(String, nullable=True)
 
-    # Doctor-specific fields
-    specialization = Column(String, nullable=True, index=True)
 
     # Receptionist-specific fields
     shift_timing = Column(String, nullable=True)
 
-    # Many-to-many convenience array — stores doctor user IDs linked to this receptionist.
-    # Used by admin.py create/update logic. The Receptionist profile row reads this
-    # array to load Doctor profile rows via a relationship (no join table needed).
-    doctor_ids = Column(ARRAY(Integer), nullable=True, default=list)
 
     # -------------------------------------------------------------------
     # Relationships
@@ -148,7 +142,6 @@ class Doctor(Base):
     id             = Column(Integer, primary_key=True, index=True)
     user_id        = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
     full_name      = Column(String, nullable=False, index=True)
-    specialization = Column(String, nullable=False, index=True)
     created_by_id  = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at     = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -161,14 +154,6 @@ class Doctor(Base):
     appointments   = relationship("Appointment",  primaryjoin="Doctor.user_id == foreign(Appointment.doctor_id)",  foreign_keys="[Appointment.doctor_id]",  viewonly=True)
     sessions       = relationship("Session",      primaryjoin="Doctor.user_id == foreign(Session.doctor_id)",      foreign_keys="[Session.doctor_id]",      viewonly=True)
 
-    # Reverse side — receptionists assigned to this doctor
-    # Loaded via Receptionist.doctor_ids ARRAY (viewonly, no join table)
-    receptionists = relationship(
-        "Receptionist",
-        primaryjoin="Doctor.user_id == any_(foreign(Receptionist.doctor_ids))",
-        foreign_keys="[Receptionist.doctor_ids]",
-        viewonly=True
-    )
 
 
 # -------------------------------------------------------------------
@@ -181,7 +166,6 @@ class Receptionist(Base):
     id             = Column(Integer, primary_key=True, index=True)
     user_id        = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
     full_name      = Column(String, nullable=True)
-    specialization = Column(String, nullable=True)
     shift_timing   = Column(String, nullable=True)
     # Stores the user_id values of linked doctors — mirrors User.doctor_ids
     # so the relationship below can resolve Doctor rows without a join table.
@@ -291,39 +275,39 @@ class Availability(Base):
 class Appointment(Base):
     __tablename__ = "appointments"
 
-    id               = Column(Integer, primary_key=True, index=True)
-    patient_id       = Column(Integer, ForeignKey("patients.id"),       nullable=False, index=True)
-    doctor_id        = Column(Integer, ForeignKey("users.id"),          nullable=False, index=True)
-    availability_id  = Column(Integer, ForeignKey("availabilities.id"), unique=True,    nullable=False)
+    id               = Column(Integer,primary_key=True,index=True)
+    patient_id       = Column(Integer,ForeignKey("patients.id"),nullable=False,index=True)
+    doctor_id        = Column(Integer,ForeignKey("users.id"),nullable=False,index=True)
+    availability_id  = Column(Integer,ForeignKey("availabilities.id"), unique=True,nullable=False)
     appointment_date = Column(DateTime(timezone=True), nullable=False, index=True)
-    organization_id  = Column(Integer, ForeignKey("organizations.id"),  nullable=False, index=True)
-    start_time       = Column(DateTime(timezone=True), nullable=False)
-    end_time         = Column(DateTime(timezone=True), nullable=False)
-    status           = Column(Enum(AppointmentStatus), default=AppointmentStatus.SCHEDULED, nullable=False, index=True)
-    notes            = Column(Text,   nullable=True)
-    meet_link        = Column(String, nullable=True)
-    created_by_id    = Column(Integer, ForeignKey("users.id"), nullable=True)
-    created_at       = Column(DateTime(timezone=True), server_default=func.now())
+    organization_id  = Column(Integer,ForeignKey("organizations.id"),nullable=False,index=True)
+    start_time       = Column(DateTime(timezone=True),nullable=False)
+    end_time         = Column(DateTime(timezone=True),nullable=False)
+    status           = Column(Enum(AppointmentStatus),default=AppointmentStatus.SCHEDULED, nullable=False, index=True)
+    notes            = Column(Text,nullable=True)
+    meet_link        = Column(String,nullable=True)
+    created_by_id    = Column(Integer,ForeignKey("users.id"),nullable=True)
+    created_at       = Column(DateTime(timezone=True),server_default=func.now())
 
     # Denormalized fields
-    patient_name   = Column(String,  nullable=True)
-    doctor_name    = Column(String,  nullable=True)
-    patient_age    = Column(Integer, nullable=True)
-    booked_by_role = Column(String,  nullable=True)
+    patient_name   = Column(String,nullable=True)
+    doctor_name    = Column(String,nullable=True)
+    patient_age    = Column(Integer,nullable=True)
+    booked_by_role = Column(String,nullable=True)
 
     __table_args__ = (
-        Index('idx_apt_doctor_status',  'doctor_id',        'status'),
-        Index('idx_apt_org_status',     'organization_id',  'status'),
-        Index('idx_apt_patient_status', 'patient_id',       'status'),
-        Index('idx_apt_date_status',    'appointment_date', 'status'),
+        Index('idx_apt_doctor_status','doctor_id','status'),
+        Index('idx_apt_org_status','organization_id','status'),
+        Index('idx_apt_patient_status', 'patient_id','status'),
+        Index('idx_apt_date_status','appointment_date','status'),
     )
 
     # Relationships
-    patient         = relationship("Patient",      back_populates="appointments")
-    doctor          = relationship("User",         back_populates="appointments",        foreign_keys=[doctor_id])
-    availability    = relationship("Availability", back_populates="appointment")
-    created_by_user = relationship("User",         back_populates="created_appointments", foreign_keys=[created_by_id])
-    session         = relationship("Session",      back_populates="appointment", uselist=False)
+    patient         = relationship("Patient",back_populates="appointments")
+    doctor          = relationship("User",back_populates="appointments",foreign_keys=[doctor_id])
+    availability    = relationship("Availability",back_populates="appointment")
+    created_by_user = relationship("User",back_populates="created_appointments",foreign_keys=[created_by_id])
+    session         = relationship("Session",back_populates="appointment",uselist=False)
 
     # Back-ref to Doctor profile row
     doctor_profile = relationship(

@@ -1,5 +1,6 @@
 import os
 import smtplib
+import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
@@ -13,17 +14,22 @@ SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 FROM_EMAIL = os.getenv("FROM_EMAIL", SMTP_USER)
 
-print(f"[EMAIL CONFIG] SMTP_HOST={SMTP_HOST}")
-print(f"[EMAIL CONFIG] SMTP_PORT={SMTP_PORT}")
-print(f"[EMAIL CONFIG] SMTP_USER={SMTP_USER}")
-print(f"[EMAIL CONFIG] SMTP_PASSWORD={'SET' if SMTP_PASSWORD else 'NOT SET'}")
-print(f"[EMAIL CONFIG] FROM_EMAIL={FROM_EMAIL}")
+# FIX: Use logger instead of print() for config values.
+# print() on module import runs at server startup for every worker process,
+# and exposes credentials in stdout logs. Use DEBUG level so they only
+# appear when explicitly enabled.
+logger = logging.getLogger("email-service")
+logger.debug(f"[EMAIL CONFIG] SMTP_HOST={SMTP_HOST}")
+logger.debug(f"[EMAIL CONFIG] SMTP_PORT={SMTP_PORT}")
+logger.debug(f"[EMAIL CONFIG] SMTP_USER={SMTP_USER}")
+logger.debug(f"[EMAIL CONFIG] SMTP_PASSWORD={'SET' if SMTP_PASSWORD else 'NOT SET'}")
+logger.debug(f"[EMAIL CONFIG] FROM_EMAIL={FROM_EMAIL}")
 
 
 def _send(to_email: str, subject: str, body: str):
     """Internal helper — sends an email. Never raises, always logs."""
     if not SMTP_USER or not SMTP_PASSWORD:
-        print(f"[EMAIL SKIP] No SMTP config. Would send to {to_email}: {subject}")
+        logger.info(f"[EMAIL SKIP] No SMTP config. Would send to {to_email}: {subject}")
         return
 
     msg = MIMEMultipart()
@@ -37,9 +43,9 @@ def _send(to_email: str, subject: str, body: str):
             server.starttls()
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.sendmail(FROM_EMAIL, to_email, msg.as_string())
-        print(f"[EMAIL SENT] To={to_email} Subject={subject}")
+        logger.info(f"[EMAIL SENT] To={to_email} Subject={subject}")
     except Exception as e:
-        print(f"[EMAIL ERROR] Failed to send to {to_email}: {e}")
+        logger.error(f"[EMAIL ERROR] Failed to send to {to_email}: {e}")
 
 
 def send_license_key_email(to_email: str, org_name: str, license_key: str):
@@ -76,8 +82,7 @@ def send_appointment_email(
 ):
     """
     Booking confirmation — sent when appointment is created.
-    Change 3: meet link is NOT included here anymore.
-              The link will be sent separately 30 minutes before the meeting.
+    Meet link is NOT included here; it will be sent separately 30 minutes before.
     """
     subject = "PsycheGraph — Appointment Confirmation"
     body = f"""
@@ -112,8 +117,8 @@ def send_meet_link_email(
     meet_link: str
 ):
     """
-    Change 3: Meet link reminder — sent to BOTH patient and doctor
-              exactly 30 minutes before the appointment starts.
+    Meet link reminder — sent to BOTH patient and doctor
+    exactly 30 minutes before the appointment starts.
     """
     subject = "PsycheGraph — Your Appointment Starts in 30 Minutes"
     body = f"""

@@ -1,3 +1,4 @@
+
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -49,12 +50,14 @@ async def register_organization(
         await db.rollback()
         raise HTTPException(status_code=400, detail=f"Registration failed: {str(e)}")
 
-    background_tasks.add_task(
-        send_license_key_email,
-        to_email=new_org.email,
-        org_name=new_org.name,
-        license_key=new_org.license_key
-    )
+    # Send license key to hospital email (not super admin)
+    if new_org.email != current_user.email:
+        background_tasks.add_task(
+            send_license_key_email,
+            to_email=new_org.email,
+            org_name=new_org.name,
+            license_key=new_org.license_key
+        )
     return new_org
 
 
@@ -160,6 +163,51 @@ async def get_role_users(
     return result.scalars().all()
 
 
+async def fetch_user_with_profiles(user_id: int, db: AsyncSession) -> models.User:
+    """Re-fetch a user with all profiles eagerly loaded — use after commit."""
+    result = await db.execute(
+        select(models.User)
+        .options(
+            selectinload(models.User.doctor_profile),
+            selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors)
+        )
+        .where(models.User.id == user_id)
+    )
+    return result.scalars().first()
+
+
+# -------------------------------------------------------------------
+# FIX: Validate multiple doctor IDs in a single IN query
+# instead of one DB query per doctor (N+1 problem)
+# -------------------------------------------------------------------
+
+async def validate_doctor_user_ids(doctor_user_ids: List[int], org_id: int, db: AsyncSession) -> List[int]:
+    """
+    Validates a list of doctor user IDs belong to the given org in ONE query.
+    Returns the validated list or raises HTTPException for any invalid ID.
+    """
+    if not doctor_user_ids:
+        return []
+
+    result = await db.execute(
+        select(models.User.id).where(
+            models.User.id.in_(doctor_user_ids),
+            models.User.role == models.UserRole.DOCTOR,
+            models.User.organization_id == org_id
+        )
+    )
+    found_ids = {row[0] for row in result.fetchall()}
+
+    for uid in doctor_user_ids:
+        if uid not in found_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Doctor user ID {uid} not found in your organization"
+            )
+
+    return doctor_user_ids
+
+
 # -------------------------------------------------------------------
 # Hospital Admin Management (Super Admin only)
 # -------------------------------------------------------------------
@@ -180,11 +228,8 @@ async def get_hospital(
     current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN])),
     db: AsyncSession = Depends(database.get_db)
 ):
-    result = await db.execute(
-        select(models.User).options(selectinload(models.User.doctor_profile), selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors)).where(models.User.id == user_id, models.User.role == models.UserRole.HOSPITAL)
-    )
-    user = result.scalars().first()
-    if not user:
+    user = await fetch_user_with_profiles(user_id, db)
+    if not user or user.role != models.UserRole.HOSPITAL:
         raise HTTPException(status_code=404, detail="Hospital Admin not found")
     return user
 
@@ -195,11 +240,8 @@ async def update_hospital(
     current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN])),
     db: AsyncSession = Depends(database.get_db)
 ):
-    result = await db.execute(
-        select(models.User).options(selectinload(models.User.doctor_profile), selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors)).where(models.User.id == user_id, models.User.role == models.UserRole.HOSPITAL)
-    )
-    user = result.scalars().first()
-    if not user:
+    user = await fetch_user_with_profiles(user_id, db)
+    if not user or user.role != models.UserRole.HOSPITAL:
         raise HTTPException(status_code=404, detail="Hospital Admin not found")
 
     update_data = user_update.model_dump(exclude_unset=True)
@@ -208,8 +250,7 @@ async def update_hospital(
     for key, value in update_data.items():
         setattr(user, key, value)
     await db.commit()
-    await db.refresh(user)
-    return user
+    return await fetch_user_with_profiles(user_id, db)
 
 @hospital_router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_hospital(
@@ -217,11 +258,8 @@ async def delete_hospital(
     current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN])),
     db: AsyncSession = Depends(database.get_db)
 ):
-    result = await db.execute(
-        select(models.User).options(selectinload(models.User.doctor_profile), selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors)).where(models.User.id == user_id, models.User.role == models.UserRole.HOSPITAL)
-    )
-    user = result.scalars().first()
-    if not user:
+    user = await fetch_user_with_profiles(user_id, db)
+    if not user or user.role != models.UserRole.HOSPITAL:
         raise HTTPException(status_code=404, detail="Hospital Admin not found")
     await db.delete(user)
     await db.commit()
@@ -255,17 +293,6 @@ async def create_doctor(
     if existing.scalars().first():
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    for rec_id in (user.receptionist_ids or []):
-        rec_res = await db.execute(
-            select(models.User).where(
-                models.User.id == rec_id,
-                models.User.role == models.UserRole.RECEPTIONIST,
-                models.User.organization_id == org_id
-            )
-        )
-        if not rec_res.scalars().first():
-            raise HTTPException(status_code=400, detail=f"Receptionist ID {rec_id} not found in your organization")
-
     # 1. Create User row
     new_user = models.User(
         email=user.email,
@@ -273,7 +300,6 @@ async def create_doctor(
         role=models.UserRole.DOCTOR,
         organization_id=org_id,
         full_name=user.full_name,
-        specialization=user.specialization,
     )
     db.add(new_user)
     try:
@@ -286,7 +312,6 @@ async def create_doctor(
     new_doctor = models.Doctor(
         user_id=new_user.id,
         full_name=user.full_name,
-        specialization=user.specialization,
         created_by_id=current_user.id,
     )
     db.add(new_doctor)
@@ -296,31 +321,8 @@ async def create_doctor(
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Doctor profile creation failed: {str(e)}")
 
-    # 3. Add this doctor's user_id into each linked receptionist's doctor_ids array
-    for rec_id in (user.receptionist_ids or []):
-        # Update User.doctor_ids
-        rec_user_res = await db.execute(select(models.User).where(models.User.id == rec_id))
-        rec_user = rec_user_res.scalars().first()
-        if rec_user:
-            existing_ids = list(rec_user.doctor_ids or [])
-            if new_user.id not in existing_ids:
-                existing_ids.append(new_user.id)
-                rec_user.doctor_ids = existing_ids
-
-        # Update Receptionist.doctor_ids (keeps both arrays in sync)
-        rec_profile_res = await db.execute(
-            select(models.Receptionist).where(models.Receptionist.user_id == rec_id)
-        )
-        rec_profile = rec_profile_res.scalars().first()
-        if rec_profile:
-            existing_ids = list(rec_profile.doctor_ids or [])
-            if new_user.id not in existing_ids:
-                existing_ids.append(new_user.id)
-                rec_profile.doctor_ids = existing_ids
-
     await db.commit()
-    await db.refresh(new_user)
-    return new_user
+    return await fetch_user_with_profiles(new_user.id, db)
 
 @doctor_router.get("", response_model=List[schemas.UserOut])
 async def list_doctors(
@@ -336,7 +338,10 @@ async def get_doctor(
     current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
     db: AsyncSession = Depends(database.get_db)
 ):
-    query = select(models.User).options(selectinload(models.User.doctor_profile), selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors)).where(models.User.id == user_id, models.User.role == models.UserRole.DOCTOR)
+    query = select(models.User).options(
+        selectinload(models.User.doctor_profile),
+        selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors)
+    ).where(models.User.id == user_id, models.User.role == models.UserRole.DOCTOR)
     if current_user.role == models.UserRole.HOSPITAL:
         query = query.where(models.User.organization_id == current_user.organization_id)
     result = await db.execute(query)
@@ -352,7 +357,10 @@ async def update_doctor(
     current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
     db: AsyncSession = Depends(database.get_db)
 ):
-    query = select(models.User).options(selectinload(models.User.doctor_profile), selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors)).where(models.User.id == user_id, models.User.role == models.UserRole.DOCTOR)
+    query = select(models.User).options(
+        selectinload(models.User.doctor_profile),
+        selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors)
+    ).where(models.User.id == user_id, models.User.role == models.UserRole.DOCTOR)
     if current_user.role == models.UserRole.HOSPITAL:
         query = query.where(models.User.organization_id == current_user.organization_id)
     result = await db.execute(query)
@@ -367,8 +375,7 @@ async def update_doctor(
     for key, value in update_data.items():
         setattr(user, key, value)
     await db.commit()
-    await db.refresh(user)
-    return user
+    return await fetch_user_with_profiles(user_id, db)
 
 @doctor_router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_doctor(
@@ -376,7 +383,10 @@ async def delete_doctor(
     current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
     db: AsyncSession = Depends(database.get_db)
 ):
-    query = select(models.User).options(selectinload(models.User.doctor_profile), selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors)).where(models.User.id == user_id, models.User.role == models.UserRole.DOCTOR)
+    query = select(models.User).options(
+        selectinload(models.User.doctor_profile),
+        selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors)
+    ).where(models.User.id == user_id, models.User.role == models.UserRole.DOCTOR)
     if current_user.role == models.UserRole.HOSPITAL:
         query = query.where(models.User.organization_id == current_user.organization_id)
     result = await db.execute(query)
@@ -415,18 +425,10 @@ async def create_receptionist(
     if existing.scalars().first():
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    validated_doctor_user_ids = []
-    for doc_id in (user.doctor_ids or []):
-        doc_res = await db.execute(
-            select(models.User).where(
-                models.User.id == doc_id,
-                models.User.role == models.UserRole.DOCTOR,
-                models.User.organization_id == org_id
-            )
-        )
-        if not doc_res.scalars().first():
-            raise HTTPException(status_code=400, detail=f"Doctor ID {doc_id} not found in your organization")
-        validated_doctor_user_ids.append(doc_id)
+    # FIX: validate all doctor IDs in ONE query instead of N queries
+    validated_doctor_user_ids = await validate_doctor_user_ids(
+        user.assigned_doctor_user_ids or [], org_id, db
+    )
 
     # 1. Create User row
     new_user = models.User(
@@ -435,9 +437,7 @@ async def create_receptionist(
         role=models.UserRole.RECEPTIONIST,
         organization_id=org_id,
         full_name=user.full_name,
-        specialization=user.specialization,
         shift_timing=user.shift_timing,
-        doctor_ids=validated_doctor_user_ids
     )
     db.add(new_user)
     try:
@@ -446,20 +446,22 @@ async def create_receptionist(
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
 
-    # 2. Create Receptionist profile row — doctor_ids array stored here
-    #    so Receptionist.doctors relationship can resolve Doctor rows.
+    # 2. Create Receptionist profile row — doctor_ids stored here for relationship resolution
     new_receptionist = models.Receptionist(
         user_id=new_user.id,
         full_name=user.full_name,
-        specialization=user.specialization,
         shift_timing=user.shift_timing,
         doctor_ids=validated_doctor_user_ids,
     )
     db.add(new_receptionist)
+    try:
+        await db.flush()
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Receptionist profile creation failed: {str(e)}")
 
     await db.commit()
-    await db.refresh(new_user)
-    return new_user
+    return await fetch_user_with_profiles(new_user.id, db)
 
 @receptionist_router.get("", response_model=List[schemas.UserOut])
 async def list_receptionists(
@@ -475,7 +477,10 @@ async def get_receptionist(
     current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
     db: AsyncSession = Depends(database.get_db)
 ):
-    query = select(models.User).options(selectinload(models.User.doctor_profile), selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors)).where(models.User.id == user_id, models.User.role == models.UserRole.RECEPTIONIST)
+    query = select(models.User).options(
+        selectinload(models.User.doctor_profile),
+        selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors)
+    ).where(models.User.id == user_id, models.User.role == models.UserRole.RECEPTIONIST)
     if current_user.role == models.UserRole.HOSPITAL:
         query = query.where(models.User.organization_id == current_user.organization_id)
     result = await db.execute(query)
@@ -491,7 +496,10 @@ async def update_receptionist(
     current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
     db: AsyncSession = Depends(database.get_db)
 ):
-    query = select(models.User).options(selectinload(models.User.doctor_profile), selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors)).where(models.User.id == user_id, models.User.role == models.UserRole.RECEPTIONIST)
+    query = select(models.User).options(
+        selectinload(models.User.doctor_profile),
+        selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors)
+    ).where(models.User.id == user_id, models.User.role == models.UserRole.RECEPTIONIST)
     if current_user.role == models.UserRole.HOSPITAL:
         query = query.where(models.User.organization_id == current_user.organization_id)
     result = await db.execute(query)
@@ -503,24 +511,14 @@ async def update_receptionist(
     if "password" in update_data:
         update_data["hashed_password"] = auth.get_password_hash(update_data.pop("password"))
 
-    if "doctor_ids" in update_data:
-        new_doc_ids = update_data["doctor_ids"] or []
+    if "assigned_doctor_user_ids" in update_data:
+        new_doc_ids = update_data.pop("assigned_doctor_user_ids") or []
         org_id = user.organization_id
-        validated = []
-        for doc_id in new_doc_ids:
-            doc_res = await db.execute(
-                select(models.User).where(
-                    models.User.id == doc_id,
-                    models.User.role == models.UserRole.DOCTOR,
-                    models.User.organization_id == org_id
-                )
-            )
-            if not doc_res.scalars().first():
-                raise HTTPException(status_code=400, detail=f"Doctor ID {doc_id} not found in your organization")
-            validated.append(doc_id)
-        update_data["doctor_ids"] = validated
 
-        # Also keep Receptionist profile doctor_ids in sync
+        # FIX: validate all doctor IDs in ONE query instead of N queries
+        validated = await validate_doctor_user_ids(new_doc_ids, org_id, db)
+
+        # Update Receptionist profile doctor_ids
         rec_profile_res = await db.execute(
             select(models.Receptionist).where(models.Receptionist.user_id == user.id)
         )
@@ -531,8 +529,7 @@ async def update_receptionist(
     for key, value in update_data.items():
         setattr(user, key, value)
     await db.commit()
-    await db.refresh(user)
-    return user
+    return await fetch_user_with_profiles(user_id, db)
 
 @receptionist_router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_receptionist(
@@ -540,7 +537,10 @@ async def delete_receptionist(
     current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
     db: AsyncSession = Depends(database.get_db)
 ):
-    query = select(models.User).options(selectinload(models.User.doctor_profile), selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors)).where(models.User.id == user_id, models.User.role == models.UserRole.RECEPTIONIST)
+    query = select(models.User).options(
+        selectinload(models.User.doctor_profile),
+        selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors)
+    ).where(models.User.id == user_id, models.User.role == models.UserRole.RECEPTIONIST)
     if current_user.role == models.UserRole.HOSPITAL:
         query = query.where(models.User.organization_id == current_user.organization_id)
     result = await db.execute(query)

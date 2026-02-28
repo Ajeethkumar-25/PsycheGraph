@@ -2,9 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from jose import jwt, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 from datetime import timedelta
 from typing import Union
 from .. import models, schemas, auth, database
+from ..models import Receptionist
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -21,10 +23,8 @@ def build_user_with_token(user: models.User, access_token: str, refresh_token: s
         role=user.role,
         organization_id=user.organization_id,
         is_active=user.is_active,
-        specialization=user.specialization,
         shift_timing=user.shift_timing,
-        doctor_id=user.id if user.role == models.UserRole.DOCTOR else None,
-        doctor_ids=user.doctor_ids or [],
+        doctor_id=user.doctor_profile.id if user.role == models.UserRole.DOCTOR and user.doctor_profile else None,
         doctor_name=None,
         access_token=access_token,
         refresh_token=refresh_token,
@@ -48,13 +48,14 @@ def make_tokens(user: models.User):
 # Generic login
 # -------------------------------------------------------------------
 
-async def login_user(
-    user_credentials: schemas.UserLogin,
-    role: models.UserRole,
-    db: AsyncSession
-):
+async def login_user(user_credentials: schemas.UserLogin, role: models.UserRole, db: AsyncSession):
     result = await db.execute(
-        select(models.User).where(models.User.email == user_credentials.email)
+        select(models.User)
+        .options(
+            selectinload(models.User.doctor_profile),
+            selectinload(models.User.receptionist_profile).selectinload(Receptionist.doctors)
+        )
+        .where(models.User.email == user_credentials.email)
     )
     user = result.scalars().first()
 
@@ -77,19 +78,33 @@ async def login_user(
 
 # -------------------------------------------------------------------
 # Hospital registration
+# Change 3: org email must match — hospital sets their own password
 # -------------------------------------------------------------------
 
 async def register_hospital(user_data: schemas.HospitalRegister, db: AsyncSession):
+    # Find org by email AND license_key — both must match
     result = await db.execute(
-        select(models.Organization).where(models.Organization.license_key == user_data.license_key)
+        select(models.Organization).where(
+            models.Organization.email == user_data.email,
+            models.Organization.license_key == user_data.license_key
+        )
     )
     org = result.scalars().first()
     if not org:
-        raise HTTPException(status_code=400, detail="Invalid license key")
+        raise HTTPException(status_code=400, detail="Email and license key do not match any registered organization")
 
-    result = await db.execute(select(models.User).where(models.User.email == user_data.email))
-    if result.scalars().first():
-        raise HTTPException(status_code=400, detail="Email already registered")
+    if not org.is_approved:
+        raise HTTPException(status_code=400, detail="Organization is not approved yet")
+
+    # Ensure no hospital user already registered for this org
+    existing = await db.execute(
+        select(models.User).where(
+            models.User.email == user_data.email,
+            models.User.role == models.UserRole.HOSPITAL
+        )
+    )
+    if existing.scalars().first():
+        raise HTTPException(status_code=400, detail="Hospital admin already registered for this organization")
 
     new_user = models.User(
         email=user_data.email,
@@ -113,20 +128,6 @@ async def register_hospital(user_data: schemas.HospitalRegister, db: AsyncSessio
     )
 
 
-async def register_doctor(user_data: schemas.DoctorRegister, db: AsyncSession):
-    raise HTTPException(
-        status_code=400,
-        detail="Doctor self-registration is disabled. Please contact your Hospital Admin."
-    )
-
-
-async def register_receptionist(user_data: schemas.ReceptionistRegister, db: AsyncSession):
-    raise HTTPException(
-        status_code=400,
-        detail="Receptionist self-registration is disabled. Please contact your Hospital Admin."
-    )
-
-
 # -------------------------------------------------------------------
 # Universal login endpoint
 # -------------------------------------------------------------------
@@ -137,7 +138,12 @@ async def login_for_access_token(
     db: AsyncSession = Depends(database.get_db)
 ):
     result = await db.execute(
-        select(models.User).where(models.User.email == user_credentials.email)
+        select(models.User)
+        .options(
+            selectinload(models.User.doctor_profile),
+            selectinload(models.User.receptionist_profile).selectinload(Receptionist.doctors)
+        )
+        .where(models.User.email == user_credentials.email)
     )
     user = result.scalars().first()
 
@@ -169,7 +175,14 @@ async def refresh_access_token(
         if email is None or token_type != "refresh":
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
-        result = await db.execute(select(models.User).where(models.User.email == email))
+        result = await db.execute(
+            select(models.User)
+            .options(
+                selectinload(models.User.doctor_profile),
+                selectinload(models.User.receptionist_profile).selectinload(Receptionist.doctors)
+            )
+            .where(models.User.email == email)
+        )
         user = result.scalars().first()
         if not user:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
@@ -215,17 +228,10 @@ async def login_receptionist(user_credentials: schemas.UserLogin, db: AsyncSessi
 
 
 # -------------------------------------------------------------------
-# Registration endpoints
+# Hospital registration (only valid self-registration)
+# Doctor and Receptionist are created by Hospital Admin only
 # -------------------------------------------------------------------
 
 @router.post("/register/hospital", response_model=schemas.RegisterResponse, tags=["Hospital Login"])
 async def register_hospital_admin(user_data: schemas.HospitalRegister, db: AsyncSession = Depends(database.get_db)):
     return await register_hospital(user_data, db)
-
-@router.post("/register/doctor", response_model=schemas.RegisterResponse, tags=["Doctor Login"])
-async def register_doctor_endpoint(user_data: schemas.DoctorRegister, db: AsyncSession = Depends(database.get_db)):
-    return await register_doctor(user_data, db)
-
-@router.post("/register/receptionist", response_model=schemas.RegisterResponse, tags=["Receptionist Login"])
-async def register_receptionist_endpoint(user_data: schemas.ReceptionistRegister, db: AsyncSession = Depends(database.get_db)):
-    return await register_receptionist(user_data, db)

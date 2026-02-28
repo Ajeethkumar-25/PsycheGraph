@@ -25,6 +25,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     except JWTError:
         raise credentials_exception
 
+    # Eagerly load both profiles + receptionist's doctors in one query
+    # Missing selectinload(Receptionist.doctors) was causing hidden lazy loads on every request
     result = await db.execute(
         select(User)
         .options(

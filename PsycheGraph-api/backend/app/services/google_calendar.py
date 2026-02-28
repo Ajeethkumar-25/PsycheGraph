@@ -7,31 +7,26 @@ from datetime import datetime
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 
-if os.name == "windows":
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    TOKEN_PATH = os.path.join(BASE_DIR, "token.json")
-    CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
-elif os.name == "linux":
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    TOKEN_PATH = os.path.join(BASE_DIR, "token.json")
-    CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
-else:
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    TOKEN_PATH = os.path.join(BASE_DIR, "token.json")
-    CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+TOKEN_PATH = os.path.join(BASE_DIR, "token.json")
+CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
 
-# ← Cache the service globally so build() is only called once
+# Cache both the service AND the credentials object in memory.
+# Before the fix, create_event() re-read token.json from disk on every call,
+# plus potentially made an HTTP refresh request. Now we only re-read when creds expire.
 _cached_service = None
+_cached_creds = None   # FIX: cache credentials object, not just the service
+
 
 class GoogleCalendarService:
     def __init__(self):
         self.service = self._get_service()
 
     def _get_service(self):
-        global _cached_service
+        global _cached_service, _cached_creds
 
-        # Return cached service if available
-        if _cached_service is not None:
+        # Return cached service if credentials are still valid
+        if _cached_service is not None and _cached_creds is not None and _cached_creds.valid:
             return _cached_service
 
         creds = None
@@ -46,30 +41,39 @@ class GoogleCalendarService:
         if not creds or not creds.valid:
             raise Exception("Google Calendar credentials invalid. Run generate_token.py again.")
 
-        # ← cache=discovery_url avoids HTTP call on every build()
+        _cached_creds = creds
         _cached_service = build(
             'calendar', 'v3',
             credentials=creds,
-            cache_discovery=False   # ← prevents file cache warnings on server
+            cache_discovery=False
         )
         return _cached_service
 
-    def create_event(self, summary: str, start_time: datetime, end_time: datetime, attendee_email: str = None):
-        try:
-            # ← Refresh credentials if expired before each event creation
-            creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
-            if creds.expired and creds.refresh_token:
-                creds.refresh(Request())
+    def _refresh_if_needed(self):
+        """
+        FIX: Check in-memory cached credentials for expiry instead of
+        re-reading token.json from disk on every create_event() call.
+        Only reads disk / makes HTTP call when actually expired.
+        """
+        global _cached_service, _cached_creds
+
+        if _cached_creds is None or not _cached_creds.valid:
+            if _cached_creds and _cached_creds.expired and _cached_creds.refresh_token:
+                _cached_creds.refresh(Request())
                 with open(TOKEN_PATH, 'w') as token:
-                    token.write(creds.to_json())
-                # rebuild service with fresh creds
-                global _cached_service
+                    token.write(_cached_creds.to_json())
+                # Rebuild service with fresh creds
                 _cached_service = build(
                     'calendar', 'v3',
-                    credentials=creds,
+                    credentials=_cached_creds,
                     cache_discovery=False
                 )
                 self.service = _cached_service
+
+    def create_event(self, summary: str, start_time: datetime, end_time: datetime, attendee_email: str = None):
+        try:
+            # FIX: Use in-memory credential check instead of reading token.json every call
+            self._refresh_if_needed()
 
             event = {
                 'summary': summary,

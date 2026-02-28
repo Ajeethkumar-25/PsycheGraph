@@ -13,8 +13,6 @@ async def create_patient(
     current_user: models.User = Depends(dependencies.require_role([models.UserRole.RECEPTIONIST, models.UserRole.HOSPITAL])),
     db: AsyncSession = Depends(database.get_db)
 ):
-    # Logic: Hospital admin can create for their org, Receptionist for their org
-    # Super Admin must provide organization_id
     if current_user.role in [models.UserRole.HOSPITAL, models.UserRole.RECEPTIONIST]:
          org_id = current_user.organization_id
     else:
@@ -54,18 +52,14 @@ async def create_patient(
 
 @router.get("", response_model=List[schemas.PatientOut])
 async def get_patients(
+    skip: int = 0,       # FIX: added pagination
+    limit: int = 100,    # FIX: added pagination
     current_user: models.User = Depends(dependencies.get_current_user),
     db: AsyncSession = Depends(database.get_db)
 ):
-    # Logic:
-    # SUPER_ADMIN: All (or filtered)
-    # HOSPITAL: All in Org
-    # RECEPTIONIST: All in Org
-    # DOCTOR: Assigned patients OR All in Org (depending on detailed reqs, usually all in org for visibility)
-    
     query = select(models.Patient)
     if current_user.role == models.UserRole.SUPER_ADMIN:
-        pass # All
+        pass  # All
     elif current_user.role == models.UserRole.HOSPITAL:
         query = query.where(models.Patient.organization_id == current_user.organization_id)
     elif current_user.role == models.UserRole.DOCTOR:
@@ -76,7 +70,8 @@ async def get_patients(
         query = query.where(models.Patient.created_by_id == current_user.id)
     else:
         raise HTTPException(status_code=403, detail="Not authorized")
-        
+
+    query = query.offset(skip).limit(limit)   # FIX: paginate results
     result = await db.execute(query)
     return result.scalars().all()
 
@@ -119,7 +114,6 @@ async def update_patient(
     elif current_user.role == models.UserRole.RECEPTIONIST:
          query = query.where(models.Patient.created_by_id == current_user.id)
     else:
-         # Doctors cannot update patients in this implementation unless specified
          raise HTTPException(status_code=403, detail="Not authorized to update patient data")
          
     result = await db.execute(query)
@@ -151,13 +145,11 @@ async def delete_patient(
         pass  # can delete any patient
 
     elif current_user.role == models.UserRole.HOSPITAL:
-        # can delete any patient in their organization
         query = query.where(
             models.Patient.organization_id == current_user.organization_id
         )
 
     elif current_user.role == models.UserRole.RECEPTIONIST:
-        # can delete patients in their organization
         query = query.where(
             models.Patient.organization_id == current_user.organization_id
         )

@@ -4,6 +4,8 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from .. import models, schemas, dependencies, database
+from ..database import AsyncSessionLocal
+from sqlalchemy import text
 from datetime import datetime, timedelta, timezone
 from ..services.google_calendar import GoogleCalendarService
 from ..services.email import send_meet_link_email
@@ -73,6 +75,82 @@ async def schedule_meet_link_email(
             end_time=end_time,
             meet_link=meet_link
         )
+
+
+async def generate_meet_link_and_notify(
+    appointment_id: int,
+    summary: str,
+    start_time_utc: datetime,
+    end_time_utc: datetime,
+    patient_email: Optional[str],
+    doctor_email: Optional[str],
+    patient_name: str,
+    doctor_name: str,
+    appointment_date: str,
+    start_time_str: str,
+    end_time_str: str,
+    appointment_start_utc: datetime,
+):
+    """
+    Background task — runs AFTER the booking response is returned.
+    1. Creates Google Meet link
+    2. Updates appointment record with the link
+    3. Schedules the email reminder
+    """
+    meet_link = None
+
+    try:
+        service = get_calendar_service()
+        if service:
+            loop = asyncio.get_event_loop()
+            meet_link = await asyncio.wait_for(
+                loop.run_in_executor(
+                    executor,
+                    lambda: service.create_event(
+                        summary=summary,
+                        start_time=start_time_utc,
+                        end_time=end_time_utc,
+                        attendee_email=None
+                    )
+                ),
+                timeout=10.0  # more generous timeout since we're in background
+            )
+    except asyncio.TimeoutError:
+        print(f"[MEET LINK] Timed out for appointment {appointment_id}")
+    except Exception as e:
+        print(f"[MEET LINK] Failed for appointment {appointment_id}: {e}")
+
+    if not meet_link:
+        print(f"[MEET LINK] No link generated for appointment {appointment_id}")
+        return
+
+    # Update the appointment row with the meet link
+    try:
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                text("UPDATE appointments SET meet_link = :link WHERE id = :id"),
+                {"link": meet_link, "id": appointment_id}
+            )
+            await db.commit()
+            print(f"[MEET LINK] Saved for appointment {appointment_id}: {meet_link}")
+    except Exception as e:
+        print(f"[MEET LINK] Failed to save link for appointment {appointment_id}: {e}")
+        return
+
+    # Schedule the email reminder 30 minutes before
+    send_at = appointment_start_utc - timedelta(minutes=30)
+    await schedule_meet_link_email(
+        appointment_id=appointment_id,
+        patient_email=patient_email,
+        doctor_email=doctor_email,
+        patient_name=patient_name,
+        doctor_name=doctor_name,
+        appointment_date=appointment_date,
+        start_time=start_time_str,
+        end_time=end_time_str,
+        meet_link=meet_link,
+        send_at=send_at,
+    )
 
 
 # -------------------------------------------------------------------
@@ -299,35 +377,7 @@ async def book_appointment(
     # slot.doctor IS the User object — Availability.doctor_id references users.id directly
     doctor_user = slot.doctor
 
-    slot_start_ist = slot.start_time.replace(tzinfo=IST)
-    slot_end_ist = slot.end_time.replace(tzinfo=IST)
-
-    try:
-        service = get_calendar_service()
-        if service:
-            loop = asyncio.get_event_loop()
-            meet_link = await asyncio.wait_for(
-                loop.run_in_executor(
-                    executor,
-                    lambda: service.create_event(
-                        summary=f"Appointment: {patient.full_name} with Dr. {slot.doctor.full_name if slot.doctor else 'Unknown'}",
-                        start_time=slot_start_ist.astimezone(timezone.utc),
-                        end_time=slot_end_ist.astimezone(timezone.utc),
-                        attendee_email=None
-                    )
-                ),
-                timeout=5.0
-            )
-        else:
-            print("[WARNING] Google Calendar unavailable — booking without meet link")
-            meet_link = None
-    except asyncio.TimeoutError:
-        print("[WARNING] Google Meet link timed out — saving without meet link")
-        meet_link = None
-    except Exception as e:
-        print(f"[WARNING] Google Meet link creation failed: {e}")
-        meet_link = None
-
+    # Save appointment immediately — meet link generated in background
     new_app = models.Appointment(
         patient_id=booking.patient_id,
         doctor_id=slot.doctor_id,
@@ -337,7 +387,7 @@ async def book_appointment(
         start_time=slot.start_time,
         end_time=slot.end_time,
         notes=booking.notes,
-        meet_link=meet_link,
+        meet_link=None,  # filled in by background task after response returns
         status="SCHEDULED",
         patient_name=patient.full_name,
         patient_age=booking.patient_age,
@@ -350,24 +400,23 @@ async def book_appointment(
     db.add(new_app)
     await db.commit()
 
-    if meet_link and (patient.email or (doctor_user and doctor_user.email)):
-        appointment_start_utc = slot.start_time.replace(tzinfo=timezone.utc)
-        send_at = appointment_start_utc - timedelta(minutes=30)
-
-        background_tasks.add_task(
-            schedule_meet_link_email,
-            appointment_id=new_app.id,
-            patient_email=patient.email,
-            doctor_email=doctor_user.email if doctor_user else None,
-            patient_name=patient.full_name,
-            doctor_name=slot.doctor.full_name if slot.doctor else "Unknown",
-            appointment_date=slot.start_time.strftime("%Y-%m-%d"),
-            start_time=slot.start_time.strftime("%H:%M"),
-            end_time=slot.end_time.strftime("%H:%M"),
-            meet_link=meet_link,
-            send_at=send_at
-        )
-        print(f"[MEET EMAIL] Scheduled for appointment {new_app.id} — will send at {send_at.strftime('%Y-%m-%d %H:%M UTC')}")
+    # Fire-and-forget: create meet link + send email after response is returned
+    doctor_email = doctor_user.email if (doctor_user and doctor_user.role == models.UserRole.DOCTOR) else None
+    background_tasks.add_task(
+        generate_meet_link_and_notify,
+        appointment_id=new_app.id,
+        summary=f"Appointment: {patient.full_name} with Dr. {slot.doctor.full_name if slot.doctor else 'Unknown'}",
+        start_time_utc=slot.start_time.replace(tzinfo=IST).astimezone(timezone.utc),
+        end_time_utc=slot.end_time.replace(tzinfo=IST).astimezone(timezone.utc),
+        patient_email=patient.email,
+        doctor_email=doctor_email,
+        patient_name=patient.full_name,
+        doctor_name=slot.doctor.full_name if slot.doctor else "Unknown",
+        appointment_date=slot.start_time.strftime("%Y-%m-%d"),
+        start_time_str=slot.start_time.strftime("%H:%M"),
+        end_time_str=slot.end_time.strftime("%H:%M"),
+        appointment_start_utc=slot.start_time.replace(tzinfo=timezone.utc),
+    )
 
     res = await db.execute(
         select(models.Appointment)

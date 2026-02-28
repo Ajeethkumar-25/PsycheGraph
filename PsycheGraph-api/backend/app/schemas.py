@@ -38,10 +38,8 @@ class UserCreate(UserBase):
 class UserOut(UserBase):
     id: int
     organization_id: Optional[int] = None
-    specialization: Optional[str] = None
     shift_timing: Optional[str] = None
-    doctor_id: Optional[int] = None        # For DOCTOR: same as their user id
-    doctor_ids: Optional[List[int]] = []   # For RECEPTIONIST: list of linked doctor user IDs
+    doctor_id: Optional[int] = None
     doctor_name: Optional[str] = None
 
     class Config:
@@ -62,25 +60,21 @@ class HospitalRegister(BaseModel):
     email: EmailStr
     password: str
     full_name: str
-    license_key: str  # Hospital still needs license key to join org
+    license_key: str  # Must match the license key issued to the organization
 
 
 class DoctorRegister(BaseModel):
     email: EmailStr
     password: str
     full_name: str
-    specialization: str
-    receptionist_ids: Optional[List[int]] = []
-    # No license_key — doctor is created by hospital admin already in the org
 
 
 class ReceptionistRegister(BaseModel):
     email: EmailStr
     password: str
     full_name: str
-    specialization: Optional[str] = None
     shift_timing: str
-    doctor_ids: Optional[List[int]] = []   # IDs of doctors (user IDs) to link
+    assigned_doctor_user_ids: Optional[List[int]] = []
 
 
 class RegisterResponse(BaseModel):
@@ -97,7 +91,7 @@ class OrganizationBase(BaseModel):
 class OrganizationCreate(BaseModel):
     name: str
     email: EmailStr
-    license_key: str  # Only org registration needs license key
+    license_key: str
 
 
 class OrganizationOut(OrganizationBase):
@@ -136,7 +130,7 @@ class PatientBase(BaseModel):
 
 class PatientCreate(PatientBase):
     organization_id: Optional[int] = None
-    doctor_id: Optional[int] = None  # user ID of the doctor
+    doctor_id: Optional[int] = None
 
 
 class PatientOut(PatientBase):
@@ -154,7 +148,7 @@ class PatientOut(PatientBase):
 
 class SessionBase(BaseModel):
     patient_id: int
-    doctor_id: int   # user ID of the doctor
+    doctor_id: int
     date: datetime
 
 
@@ -183,7 +177,6 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     organization_id: Optional[int] = None
     password: Optional[str] = None
-    doctor_ids: Optional[List[int]] = None  # For updating receptionist ↔ doctor links
 
 
 class OrganizationUpdate(BaseModel):
@@ -199,7 +192,7 @@ class PatientUpdate(BaseModel):
     email: Optional[str] = None
     gender: Optional[str] = None
     address: Optional[str] = None
-    doctor_id: Optional[int] = None  # user ID of the doctor
+    doctor_id: Optional[int] = None
 
 
 class AvailabilityBase(BaseModel):
@@ -208,12 +201,12 @@ class AvailabilityBase(BaseModel):
 
 
 class AvailabilityCreate(AvailabilityBase):
-    doctor_id: int       # user ID of the doctor
+    doctor_id: int
     organization_id: Optional[int] = None
 
 
 class AvailabilityBatchCreate(BaseModel):
-    doctor_id: int       # user ID of the doctor
+    doctor_id: int
     organization_id: Optional[int] = None
     start_time: datetime
     end_time: datetime
@@ -239,7 +232,7 @@ class AvailabilityOut(AvailabilityBase):
 
 class AppointmentBase(BaseModel):
     patient_id: int
-    doctor_id: int       # user ID of the doctor
+    doctor_id: int
     start_time: datetime
     end_time: datetime
     notes: Optional[str] = None
