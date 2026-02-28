@@ -1,21 +1,91 @@
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from dotenv import load_dotenv
 import os
 import uuid
+import logging
 from datetime import datetime
+from pathlib import Path
+
+logger = logging.getLogger("google_calendar")
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-TOKEN_PATH = os.path.join(BASE_DIR, "token.json")
-CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
+# Load .env explicitly — on EC2/systemd the env may not be sourced automatically
+_base_dir = Path(__file__).resolve().parent.parent.parent
+load_dotenv(_base_dir / ".env")
 
-# Cache both the service AND the credentials object in memory.
-# Before the fix, create_event() re-read token.json from disk on every call,
-# plus potentially made an HTTP refresh request. Now we only re-read when creds expire.
+# Use env vars if set (preferred for deployment), fall back to computed path
+# In your .env set:
+#   GOOGLE_TOKEN_PATH=/absolute/path/to/token.json
+#   GOOGLE_CREDENTIALS_PATH=/absolute/path/to/credentials.json
+TOKEN_PATH = os.getenv("GOOGLE_TOKEN_PATH") or str(_base_dir / "token.json")
+CREDENTIALS_PATH = os.getenv("GOOGLE_CREDENTIALS_PATH") or str(_base_dir / "credentials.json")
+
+# ── Startup diagnostic — printed once when module loads ───────────────────────
+logger.info(f"[GOOGLE CALENDAR] TOKEN_PATH      = {TOKEN_PATH}")
+logger.info(f"[GOOGLE CALENDAR] CREDENTIALS_PATH= {CREDENTIALS_PATH}")
+logger.info(f"[GOOGLE CALENDAR] token.json exists: {os.path.exists(TOKEN_PATH)}")
+logger.info(f"[GOOGLE CALENDAR] credentials.json exists: {os.path.exists(CREDENTIALS_PATH)}")
+
 _cached_service = None
-_cached_creds = None   # FIX: cache credentials object, not just the service
+
+
+def _load_and_refresh_creds() -> Credentials | None:
+    """
+    Load credentials from token.json and refresh if expired.
+    Returns valid Credentials or None if something is wrong.
+    Logs the exact failure reason so it shows up in server logs.
+    """
+    if not os.path.exists(TOKEN_PATH):
+        logger.error(
+            f"[GOOGLE CALENDAR] token.json not found at: {TOKEN_PATH}\n"
+            f"  Fix: copy token.json to that path on the server, or set "
+            f"GOOGLE_TOKEN_PATH in your .env to the correct absolute path."
+        )
+        return None
+
+    try:
+        creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
+    except Exception as e:
+        logger.error(f"[GOOGLE CALENDAR] Failed to read token.json: {e}")
+        return None
+
+    if creds.valid:
+        return creds
+
+    if creds.expired and creds.refresh_token:
+        logger.info("[GOOGLE CALENDAR] Token expired — attempting refresh...")
+        try:
+            creds.refresh(Request())
+            # Save refreshed token back to disk
+            with open(TOKEN_PATH, 'w') as f:
+                f.write(creds.to_json())
+            logger.info("[GOOGLE CALENDAR] Token refreshed and saved successfully.")
+            return creds
+        except Exception as e:
+            logger.error(
+                f"[GOOGLE CALENDAR] Token refresh failed: {e}\n"
+                f"  This usually means:\n"
+                f"  1. The refresh token was revoked (re-run generate_token.py on the server)\n"
+                f"  2. Google blocked the refresh from this server IP\n"
+                f"  3. The OAuth app is in test mode and token expired after 7 days\n"
+                f"     Fix: go to Google Cloud Console → OAuth consent screen → publish the app"
+            )
+            return None
+
+    logger.error(
+        f"[GOOGLE CALENDAR] Credentials invalid and cannot be refreshed.\n"
+        f"  creds.valid={creds.valid}, creds.expired={creds.expired}, "
+        f"  has_refresh_token={bool(creds.refresh_token)}\n"
+        f"  Fix: re-run generate_token.py directly on the EC2 server."
+    )
+    return None
+
+
+def _build_service(creds: Credentials):
+    return build('calendar', 'v3', credentials=creds, cache_discovery=False)
 
 
 class GoogleCalendarService:
@@ -23,79 +93,60 @@ class GoogleCalendarService:
         self.service = self._get_service()
 
     def _get_service(self):
-        global _cached_service, _cached_creds
-
-        # Return cached service if credentials are still valid
-        if _cached_service is not None and _cached_creds is not None and _cached_creds.valid:
+        global _cached_service
+        if _cached_service is not None:
             return _cached_service
 
-        creds = None
-        if os.path.exists(TOKEN_PATH):
-            creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
+        creds = _load_and_refresh_creds()
+        if not creds:
+            return None
 
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-            with open(TOKEN_PATH, 'w') as token:
-                token.write(creds.to_json())
-
-        if not creds or not creds.valid:
-            raise Exception("Google Calendar credentials invalid. Run generate_token.py again.")
-
-        _cached_creds = creds
-        _cached_service = build(
-            'calendar', 'v3',
-            credentials=creds,
-            cache_discovery=False
-        )
+        _cached_service = _build_service(creds)
+        logger.info("[GOOGLE CALENDAR] Service initialized and cached.")
         return _cached_service
 
-    def _refresh_if_needed(self):
-        """
-        FIX: Check in-memory cached credentials for expiry instead of
-        re-reading token.json from disk on every create_event() call.
-        Only reads disk / makes HTTP call when actually expired.
-        """
-        global _cached_service, _cached_creds
+    def create_event(
+        self,
+        summary: str,
+        start_time: datetime,
+        end_time: datetime,
+        attendee_email: str = None
+    ):
+        global _cached_service
 
-        if _cached_creds is None or not _cached_creds.valid:
-            if _cached_creds and _cached_creds.expired and _cached_creds.refresh_token:
-                _cached_creds.refresh(Request())
-                with open(TOKEN_PATH, 'w') as token:
-                    token.write(_cached_creds.to_json())
-                # Rebuild service with fresh creds
-                _cached_service = build(
-                    'calendar', 'v3',
-                    credentials=_cached_creds,
-                    cache_discovery=False
-                )
-                self.service = _cached_service
+        # Always re-check credentials before creating an event
+        # so a long-running server handles token expiry gracefully
+        creds = _load_and_refresh_creds()
+        if not creds:
+            logger.error("[GOOGLE CALENDAR] Cannot create event — credentials unavailable.")
+            return None
 
-    def create_event(self, summary: str, start_time: datetime, end_time: datetime, attendee_email: str = None):
-        try:
-            # FIX: Use in-memory credential check instead of reading token.json every call
-            self._refresh_if_needed()
+        # Rebuild service with fresh creds (handles the case where token was refreshed)
+        _cached_service = _build_service(creds)
+        self.service = _cached_service
 
-            event = {
-                'summary': summary,
-                'start': {
-                    'dateTime': start_time.isoformat(),
-                    'timeZone': 'UTC',
-                },
-                'end': {
-                    'dateTime': end_time.isoformat(),
-                    'timeZone': 'UTC',
-                },
-                'conferenceData': {
-                    'createRequest': {
-                        'requestId': str(uuid.uuid4()),
-                        'conferenceSolutionKey': {'type': 'hangoutsMeet'}
-                    }
+        event = {
+            'summary': summary,
+            'start': {
+                'dateTime': start_time.isoformat(),
+                'timeZone': 'UTC',
+            },
+            'end': {
+                'dateTime': end_time.isoformat(),
+                'timeZone': 'UTC',
+            },
+            'conferenceData': {
+                'createRequest': {
+                    'requestId': str(uuid.uuid4()),
+                    'conferenceSolutionKey': {'type': 'hangoutsMeet'}
                 }
             }
+        }
 
-            if attendee_email:
-                event['attendees'] = [{'email': attendee_email}]
+        if attendee_email:
+            event['attendees'] = [{'email': attendee_email}]
 
+        try:
             result = self.service.events().insert(
                 calendarId='primary',
                 body=event,
@@ -104,8 +155,12 @@ class GoogleCalendarService:
             ).execute()
 
             meet_link = result.get('hangoutLink')
+            if meet_link:
+                logger.info(f"[GOOGLE CALENDAR] Meet link created: {meet_link}")
+            else:
+                logger.warning("[GOOGLE CALENDAR] Event created but no hangoutLink returned.")
             return meet_link
 
         except Exception as e:
-            print(f"[GOOGLE CALENDAR ERROR] {e}")
+            logger.error(f"[GOOGLE CALENDAR] Event creation failed: {e}")
             return None
