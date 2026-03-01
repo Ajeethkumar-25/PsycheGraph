@@ -129,14 +129,19 @@ async def generate_meet_link_and_notify(
     # Save meet link to appointment
     try:
         async with AsyncSessionLocal() as db:
-            await db.execute(
-                text("UPDATE appointments SET meet_link = :link WHERE id = :id"),
-                {"link": meet_link, "id": appointment_id}
+            result = await db.execute(
+                select(models.Appointment).where(models.Appointment.id == appointment_id)
             )
+            appointment = result.scalars().first()
+            if not appointment:
+                print(f"[MEET LINK] Appointment {appointment_id} not found in DB — cannot save link")
+                return
+            appointment.meet_link = meet_link
             await db.commit()
             print(f"[MEET LINK] Saved for appointment {appointment_id}: {meet_link}")
     except Exception as e:
         print(f"[MEET LINK] Failed to save link for appointment {appointment_id}: {e}")
+        print(traceback.format_exc())
         return
 
     # Schedule email reminder 30 minutes before

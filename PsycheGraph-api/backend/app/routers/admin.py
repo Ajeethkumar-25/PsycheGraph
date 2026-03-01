@@ -155,6 +155,8 @@ async def get_role_users(
             query = query.where(models.User.organization_id == org_id)
     elif current_user.role == models.UserRole.HOSPITAL:
         query = query.where(models.User.organization_id == current_user.organization_id)
+    elif current_user.role == models.UserRole.RECEPTIONIST:
+        query = query.where(models.User.organization_id == current_user.organization_id)
     else:
         raise HTTPException(status_code=403, detail="Not authorized")
 
