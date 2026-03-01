@@ -10,6 +10,8 @@ from datetime import datetime, timedelta, timezone
 from ..services.google_calendar import GoogleCalendarService
 from ..services.email import send_meet_link_email
 import asyncio
+import traceback
+import os
 from concurrent.futures import ThreadPoolExecutor
 
 executor = ThreadPoolExecutor()
@@ -94,8 +96,8 @@ async def generate_meet_link_and_notify(
     """
     Background task — runs AFTER the booking response is returned.
     1. Creates Google Meet link
-    2. Updates appointment record with the link
-    3. Schedules the email reminder
+    2. Updates appointment with the link
+    3. Schedules email reminder
     """
     meet_link = None
 
@@ -113,7 +115,7 @@ async def generate_meet_link_and_notify(
                         attendee_email=None
                     )
                 ),
-                timeout=10.0  # more generous timeout since we're in background
+                timeout=60.0
             )
     except asyncio.TimeoutError:
         print(f"[MEET LINK] Timed out for appointment {appointment_id}")
@@ -124,7 +126,7 @@ async def generate_meet_link_and_notify(
         print(f"[MEET LINK] No link generated for appointment {appointment_id}")
         return
 
-    # Update the appointment row with the meet link
+    # Save meet link to appointment
     try:
         async with AsyncSessionLocal() as db:
             await db.execute(
@@ -137,7 +139,7 @@ async def generate_meet_link_and_notify(
         print(f"[MEET LINK] Failed to save link for appointment {appointment_id}: {e}")
         return
 
-    # Schedule the email reminder 30 minutes before
+    # Schedule email reminder 30 minutes before
     send_at = appointment_start_utc - timedelta(minutes=30)
     await schedule_meet_link_email(
         appointment_id=appointment_id,
@@ -154,6 +156,74 @@ async def generate_meet_link_and_notify(
 
 
 # -------------------------------------------------------------------
+# DEBUG — Test meet link generation directly (no background task)
+# Hit GET /appointments/test-meet-link from Swagger to see exact error
+# -------------------------------------------------------------------
+
+@router.get("/test-meet-link")
+async def test_meet_link():
+    from ..services.google_calendar import TOKEN_PATH, CREDENTIALS_PATH
+
+    results = {}
+    results["token_path"] = TOKEN_PATH
+    results["credentials_path"] = CREDENTIALS_PATH
+    results["token_exists"] = os.path.exists(TOKEN_PATH)
+    results["credentials_exists"] = os.path.exists(CREDENTIALS_PATH)
+
+    if not results["token_exists"]:
+        return {"status": "failed", "reason": "token.json not found at the path above", **results}
+
+    # Try loading and refreshing credentials
+    try:
+        from google.oauth2.credentials import Credentials
+        from google.auth.transport.requests import Request
+        creds = Credentials.from_authorized_user_file(
+            TOKEN_PATH, ['https://www.googleapis.com/auth/calendar']
+        )
+        results["creds_valid"] = creds.valid
+        results["creds_expired"] = creds.expired
+        results["has_refresh_token"] = bool(creds.refresh_token)
+
+        if creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+            results["refresh_attempted"] = True
+            results["creds_valid_after_refresh"] = creds.valid
+    except Exception as e:
+        return {
+            "status": "failed",
+            "reason": f"credentials error: {str(e)}",
+            "traceback": traceback.format_exc(),
+            **results
+        }
+
+    # Try creating a meet event
+    try:
+        service = get_calendar_service()
+        if not service:
+            return {
+                "status": "failed",
+                "reason": "GoogleCalendarService returned None — check logs for [GOOGLE CALENDAR] errors",
+                **results
+            }
+
+        start = datetime.now(timezone.utc) + timedelta(hours=1)
+        end = start + timedelta(minutes=30)
+        link = service.create_event("Test Meeting", start, end)
+        results["meet_link"] = link
+        return {
+            "status": "ok" if link else "failed — event created but no hangoutLink in response",
+            **results
+        }
+    except Exception as e:
+        return {
+            "status": "failed",
+            "reason": f"create_event error: {str(e)}",
+            "traceback": traceback.format_exc(),
+            **results
+        }
+
+
+# -------------------------------------------------------------------
 # 1. Manage Availability
 # -------------------------------------------------------------------
 
@@ -165,7 +235,7 @@ async def create_availability(
     ])),
     db: AsyncSession = Depends(database.get_db)
 ):
-    target_doctor_id = slot.doctor_id  # this is a users.id value
+    target_doctor_id = slot.doctor_id
     org_id = slot.organization_id or current_user.organization_id
 
     if slot.start_time.tzinfo:
@@ -187,8 +257,6 @@ async def create_availability(
         receptionist_profile = rec_res.scalars().first()
         if not receptionist_profile:
             raise HTTPException(status_code=403, detail="Receptionist profile not found")
-
-        # Receptionist.doctors are Doctor profile rows; Doctor.user_id is the users.id
         assigned_user_ids = [d.user_id for d in receptionist_profile.doctors]
         if target_doctor_id not in assigned_user_ids:
             raise HTTPException(status_code=403, detail="You are not assigned to this doctor")
@@ -236,7 +304,7 @@ async def batch_create_availability(
     ])),
     db: AsyncSession = Depends(database.get_db)
 ):
-    target_doctor_id = batch.doctor_id  # this is a users.id value
+    target_doctor_id = batch.doctor_id
     org_id = batch.organization_id or current_user.organization_id
 
     if current_user.role == models.UserRole.DOCTOR:
@@ -252,8 +320,6 @@ async def batch_create_availability(
         receptionist_profile = rec_res.scalars().first()
         if not receptionist_profile:
             raise HTTPException(status_code=403, detail="Receptionist profile not found")
-
-        # Compare against Doctor.user_id (which equals users.id for that doctor)
         assigned_user_ids = [d.user_id for d in receptionist_profile.doctors]
         if target_doctor_id not in assigned_user_ids:
             raise HTTPException(status_code=403, detail="You are not assigned to this doctor")
@@ -324,9 +390,7 @@ async def get_availability(
     only_available: bool = True,
     db: AsyncSession = Depends(database.get_db)
 ):
-    query = select(models.Availability).options(
-        selectinload(models.Availability.doctor)
-    )
+    query = select(models.Availability).options(selectinload(models.Availability.doctor))
     if doctor_id:
         query = query.where(models.Availability.doctor_id == doctor_id)
     if organization_id:
@@ -343,7 +407,7 @@ async def get_availability(
 
 
 # -------------------------------------------------------------------
-# 2. Booking Logic
+# 2. Booking
 # -------------------------------------------------------------------
 
 @router.post("/book", response_model=schemas.AppointmentOut)
@@ -374,10 +438,8 @@ async def book_appointment(
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    # slot.doctor IS the User object — Availability.doctor_id references users.id directly
     doctor_user = slot.doctor
 
-    # Save appointment immediately — meet link generated in background
     new_app = models.Appointment(
         patient_id=booking.patient_id,
         doctor_id=slot.doctor_id,
@@ -387,7 +449,7 @@ async def book_appointment(
         start_time=slot.start_time,
         end_time=slot.end_time,
         notes=booking.notes,
-        meet_link=None,  # filled in by background task after response returns
+        meet_link=None,
         status="SCHEDULED",
         patient_name=patient.full_name,
         patient_age=booking.patient_age,
@@ -400,7 +462,6 @@ async def book_appointment(
     db.add(new_app)
     await db.commit()
 
-    # Fire-and-forget: create meet link + send email after response is returned
     doctor_email = doctor_user.email if (doctor_user and doctor_user.role == models.UserRole.DOCTOR) else None
     background_tasks.add_task(
         generate_meet_link_and_notify,
