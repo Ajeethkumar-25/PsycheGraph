@@ -11,6 +11,7 @@ from ..services.google_calendar import GoogleCalendarService
 from ..services.email import send_meet_link_email
 import asyncio
 import traceback
+import psycopg2
 import os
 from concurrent.futures import ThreadPoolExecutor
 
@@ -104,7 +105,7 @@ async def generate_meet_link_and_notify(
     try:
         service = get_calendar_service()
         if service:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             meet_link = await asyncio.wait_for(
                 loop.run_in_executor(
                     executor,
@@ -127,20 +128,17 @@ async def generate_meet_link_and_notify(
         return
 
     # Save meet link to appointment
+# Save meet link using direct sync DB connection (avoids async deadlock in background task)
     try:
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(models.Appointment).where(models.Appointment.id == appointment_id)
-            )
-            appointment = result.scalars().first()
-            if not appointment:
-                print(f"[MEET LINK] Appointment {appointment_id} not found in DB — cannot save link")
-                return
-            appointment.meet_link = meet_link
-            await db.commit()
-            print(f"[MEET LINK] Saved for appointment {appointment_id}: {meet_link}")
+        conn = psycopg2.connect(os.environ["DATABASE_URL"].replace("+asyncpg", ""))
+        cur = conn.cursor()
+        cur.execute("UPDATE appointments SET meet_link = %s WHERE id = %s", (meet_link, appointment_id))
+        conn.commit()
+        cur.close()
+        conn.close()
+        print(f"[MEET LINK] Saved for appointment {appointment_id}: {meet_link}")
     except Exception as e:
-        print(f"[MEET LINK] Failed to save link for appointment {appointment_id}: {e}")
+        print(f"[MEET LINK] Failed to save: {e}")
         print(traceback.format_exc())
         return
 
