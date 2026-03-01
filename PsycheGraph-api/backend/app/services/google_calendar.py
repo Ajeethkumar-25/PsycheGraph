@@ -3,6 +3,7 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
 import httplib2
+import google_auth_httplib2
 import os
 import uuid
 import logging
@@ -77,8 +78,7 @@ def _load_and_refresh_creds() -> Credentials | None:
 
 
 def _build_service(creds: Credentials):
-    # Use httplib2 with explicit timeout so calls never hang indefinitely
-    http = creds.authorize(httplib2.Http(timeout=API_TIMEOUT))
+    http = google_auth_httplib2.AuthorizedHttp(creds, http=httplib2.Http(timeout=30))
     return build('calendar', 'v3', http=http, cache_discovery=False)
 
 
