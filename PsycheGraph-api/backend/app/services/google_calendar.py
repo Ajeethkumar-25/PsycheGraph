@@ -164,3 +164,4 @@ class GoogleCalendarService:
         except Exception as e:
             logger.error(f"[GOOGLE CALENDAR] Event creation failed: {e}")
             return None
+
