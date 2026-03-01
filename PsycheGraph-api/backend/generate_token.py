@@ -24,7 +24,7 @@ def generate_token():
             # ← access_type=offline gives you a refresh token
             # ← prompt=consent forces Google to give a NEW refresh token
             creds = flow.run_local_server(
-                port=8080,
+                port=0,
                 access_type='offline',
                 prompt='consent'
             )

@@ -11,8 +11,8 @@ import librosa
 import soundfile as sf
 from pydub import AudioSegment
 
-import sounddevice as sd
-import scipy.io.wavfile as wav
+# import sounddevice as sd
+# import scipy.io.wavfile as wav
 
 from fastapi import UploadFile, HTTPException
 
@@ -29,8 +29,8 @@ load_dotenv(env_path)
 # -------------------------------------------------
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-async_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
-sync_client = OpenAI(api_key=OPENAI_API_KEY)
+# async_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+# sync_client = OpenAI(api_key=OPENAI_API_KEY)
 
 TEMP_DIR = "temp_audio"
 TRANSCRIPT_DIR = "transcripts"

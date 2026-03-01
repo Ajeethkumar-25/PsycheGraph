@@ -327,7 +327,7 @@ async def create_doctor(
 @doctor_router.get("", response_model=List[schemas.UserOut])
 async def list_doctors(
     skip: int = 0, limit: int = 100,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL, models.UserRole.RECEPTIONIST])),
     db: AsyncSession = Depends(database.get_db)
 ):
     return await get_role_users(models.UserRole.DOCTOR, skip, limit, current_user, db)
@@ -335,7 +335,7 @@ async def list_doctors(
 @doctor_router.get("/{user_id}", response_model=schemas.UserOut)
 async def get_doctor(
     user_id: int,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL, models.UserRole.RECEPTIONIST])),
     db: AsyncSession = Depends(database.get_db)
 ):
     query = select(models.User).options(
