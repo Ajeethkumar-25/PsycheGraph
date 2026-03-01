@@ -2,7 +2,6 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
-import httplib2
 import os
 import uuid
 import logging
@@ -13,12 +12,18 @@ logger = logging.getLogger("google_calendar")
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 
+# Load .env explicitly — on EC2/systemd the env may not be sourced automatically
 _base_dir = Path(__file__).resolve().parent.parent.parent
 load_dotenv(_base_dir / ".env")
 
+# Use env vars if set (preferred for deployment), fall back to computed path
+# In your .env set:
+#   GOOGLE_TOKEN_PATH=/absolute/path/to/token.json
+#   GOOGLE_CREDENTIALS_PATH=/absolute/path/to/credentials.json
 TOKEN_PATH = os.getenv("GOOGLE_TOKEN_PATH") or str(_base_dir / "token.json")
 CREDENTIALS_PATH = os.getenv("GOOGLE_CREDENTIALS_PATH") or str(_base_dir / "credentials.json")
 
+# ── Startup diagnostic — printed once when module loads ───────────────────────
 logger.info(f"[GOOGLE CALENDAR] TOKEN_PATH      = {TOKEN_PATH}")
 logger.info(f"[GOOGLE CALENDAR] CREDENTIALS_PATH= {CREDENTIALS_PATH}")
 logger.info(f"[GOOGLE CALENDAR] token.json exists: {os.path.exists(TOKEN_PATH)}")
@@ -26,11 +31,13 @@ logger.info(f"[GOOGLE CALENDAR] credentials.json exists: {os.path.exists(CREDENT
 
 _cached_service = None
 
-# Timeout in seconds for all Google API HTTP calls
-API_TIMEOUT = 30
-
 
 def _load_and_refresh_creds() -> Credentials | None:
+    """
+    Load credentials from token.json and refresh if expired.
+    Returns valid Credentials or None if something is wrong.
+    Logs the exact failure reason so it shows up in server logs.
+    """
     if not os.path.exists(TOKEN_PATH):
         logger.error(
             f"[GOOGLE CALENDAR] token.json not found at: {TOKEN_PATH}\n"
@@ -52,6 +59,7 @@ def _load_and_refresh_creds() -> Credentials | None:
         logger.info("[GOOGLE CALENDAR] Token expired — attempting refresh...")
         try:
             creds.refresh(Request())
+            # Save refreshed token back to disk
             with open(TOKEN_PATH, 'w') as f:
                 f.write(creds.to_json())
             logger.info("[GOOGLE CALENDAR] Token refreshed and saved successfully.")
@@ -77,9 +85,7 @@ def _load_and_refresh_creds() -> Credentials | None:
 
 
 def _build_service(creds: Credentials):
-    # Use httplib2 with explicit timeout so calls never hang indefinitely
-    http = creds.authorize(httplib2.Http(timeout=API_TIMEOUT))
-    return build('calendar', 'v3', http=http, cache_discovery=False)
+    return build('calendar', 'v3', credentials=creds, cache_discovery=False)
 
 
 class GoogleCalendarService:
@@ -108,12 +114,14 @@ class GoogleCalendarService:
     ):
         global _cached_service
 
+        # Always re-check credentials before creating an event
+        # so a long-running server handles token expiry gracefully
         creds = _load_and_refresh_creds()
         if not creds:
             logger.error("[GOOGLE CALENDAR] Cannot create event — credentials unavailable.")
             return None
 
-        # Rebuild service with fresh creds + timeout
+        # Rebuild service with fresh creds (handles the case where token was refreshed)
         _cached_service = _build_service(creds)
         self.service = _cached_service
 
