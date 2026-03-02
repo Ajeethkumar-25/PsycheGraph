@@ -152,8 +152,13 @@ class SessionBase(BaseModel):
     date: datetime
 
 
-class SessionCreate(SessionBase):
-    pass
+class SessionCreate(BaseModel):
+    patient_id: int
+    doctor_id: int
+    appointment_id: Optional[int] = None
+    transcript: Optional[str] = None
+    summary: Optional[str] = None
+    soap_notes: Optional[str] = None
 
 
 class SessionOut(SessionBase):

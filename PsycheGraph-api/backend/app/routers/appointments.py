@@ -39,6 +39,7 @@ router = APIRouter(prefix="/appointments", tags=["Appointments"])
 
 def save_meet_link_sync(appointment_id: int, meet_link: str):
     """Pure sync function to save meet link — runs in a thread, no event loop needed."""
+    
     try:
         conn = psycopg2.connect(
             host="localhost",
@@ -98,6 +99,36 @@ def generate_meet_link_sync(
 
     # Step 2: Save to DB
     save_meet_link_sync(appointment_id, meet_link)
+
+    try:
+        fireflies_api_key = os.environ.get("FIREFLIES_API_KEY", "")
+        if fireflies_api_key:
+            import requests
+            query = """
+            mutation AddToLiveMeeting($url: String!, $title: String) {
+                addToLiveMeeting(url: $url, meeting_name: $title) {
+                    success
+                    message
+                }
+            }
+            """
+            response = requests.post(
+                "https://api.fireflies.ai/graphql",
+                headers={
+                    "Authorization": f"Bearer {fireflies_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={"query": query, "variables": {"url": meet_link, "title": summary}},
+                timeout=15
+            )
+            result = response.json().get("data", {}).get("addToLiveMeeting", {})
+            if result.get("success"):
+                print(f"[FIREFLIES] Bot invited for appointment {appointment_id}")
+            else:
+                print(f"[FIREFLIES] Bot invite failed: {result.get('message')}")
+    except Exception as e:
+        print(f"[FIREFLIES] Error inviting bot: {e}")
+
 
     # Step 3: Send emails
     try:
