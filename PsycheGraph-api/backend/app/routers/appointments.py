@@ -116,7 +116,7 @@ async def generate_meet_link_and_notify(
                         attendee_email=None
                     )
                 ),
-                timeout=60.0
+                timeout=120.0
             )
     except asyncio.TimeoutError:
         print(f"[MEET LINK] Timed out for appointment {appointment_id}")
@@ -130,7 +130,11 @@ async def generate_meet_link_and_notify(
     # Save meet link to appointment
 # Save meet link using direct sync DB connection (avoids async deadlock in background task)
     try:
-        conn = psycopg2.connect(os.environ["DATABASE_URL"].replace("+asyncpg", ""))
+        conn = psycopg2.connect(
+            os.environ["DATABASE_URL"]
+            .replace("+asyncpg", "")
+            .replace("65.1.249.160", "localhost")
+        )
         cur = conn.cursor()
         cur.execute("UPDATE appointments SET meet_link = %s WHERE id = %s", (meet_link, appointment_id))
         conn.commit()
