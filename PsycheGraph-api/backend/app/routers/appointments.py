@@ -1,17 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from .. import models, schemas, dependencies, database
-from ..database import AsyncSessionLocal
 from sqlalchemy import text
 from datetime import datetime, timedelta, timezone
 from ..services.google_calendar import GoogleCalendarService
 from ..services.email import send_meet_link_email
 import asyncio
 import traceback
-import psycopg2
 import os
 from concurrent.futures import ThreadPoolExecutor
 
@@ -93,11 +91,12 @@ async def generate_meet_link_and_notify(
     start_time_str: str,
     end_time_str: str,
     appointment_start_utc: datetime,
+    db: AsyncSession,
 ):
     """
-    Background task — runs AFTER the booking response is returned.
+    Runs synchronously within the booking request.
     1. Creates Google Meet link
-    2. Updates appointment with the link
+    2. Updates appointment with the link using the existing db session
     3. Schedules email reminder
     """
     meet_link = None
@@ -122,24 +121,23 @@ async def generate_meet_link_and_notify(
         print(f"[MEET LINK] Timed out for appointment {appointment_id}")
     except Exception as e:
         print(f"[MEET LINK] Failed for appointment {appointment_id}: {e}")
+        print(traceback.format_exc())
 
     if not meet_link:
         print(f"[MEET LINK] No link generated for appointment {appointment_id}")
         return
 
-    # Save meet link to appointment
-# Save meet link using direct sync DB connection (avoids async deadlock in background task)
+    # Save meet link using the existing db session (no new session, no deadlock)
     try:
-        conn = psycopg2.connect(
-            os.environ["DATABASE_URL"]
-            .replace("+asyncpg", "")
-            .replace("65.1.249.160", "localhost")
+        result = await db.execute(
+            select(models.Appointment).where(models.Appointment.id == appointment_id)
         )
-        cur = conn.cursor()
-        cur.execute("UPDATE appointments SET meet_link = %s WHERE id = %s", (meet_link, appointment_id))
-        conn.commit()
-        cur.close()
-        conn.close()
+        appointment = result.scalars().first()
+        if not appointment:
+            print(f"[MEET LINK] Appointment {appointment_id} not found in DB")
+            return
+        appointment.meet_link = meet_link
+        await db.commit()
         print(f"[MEET LINK] Saved for appointment {appointment_id}: {meet_link}")
     except Exception as e:
         print(f"[MEET LINK] Failed to save: {e}")
@@ -163,8 +161,7 @@ async def generate_meet_link_and_notify(
 
 
 # -------------------------------------------------------------------
-# DEBUG — Test meet link generation directly (no background task)
-# Hit GET /appointments/test-meet-link from Swagger to see exact error
+# DEBUG — Test meet link generation directly
 # -------------------------------------------------------------------
 
 @router.get("/test-meet-link")
@@ -180,7 +177,6 @@ async def test_meet_link():
     if not results["token_exists"]:
         return {"status": "failed", "reason": "token.json not found at the path above", **results}
 
-    # Try loading and refreshing credentials
     try:
         from google.oauth2.credentials import Credentials
         from google.auth.transport.requests import Request
@@ -203,13 +199,12 @@ async def test_meet_link():
             **results
         }
 
-    # Try creating a meet event
     try:
         service = get_calendar_service()
         if not service:
             return {
                 "status": "failed",
-                "reason": "GoogleCalendarService returned None — check logs for [GOOGLE CALENDAR] errors",
+                "reason": "GoogleCalendarService returned None",
                 **results
             }
 
@@ -420,7 +415,6 @@ async def get_availability(
 @router.post("/book", response_model=schemas.AppointmentOut)
 async def book_appointment(
     booking: schemas.AppointmentCreate,
-    background_tasks: BackgroundTasks,
     current_user: models.User = Depends(dependencies.get_current_user),
     db: AsyncSession = Depends(database.get_db)
 ):
@@ -469,9 +463,10 @@ async def book_appointment(
     db.add(new_app)
     await db.commit()
 
+    # Generate meet link synchronously — awaited directly, not a background task
+    # This adds a few seconds to the response but guarantees the link is saved
     doctor_email = doctor_user.email if (doctor_user and doctor_user.role == models.UserRole.DOCTOR) else None
-    background_tasks.add_task(
-        generate_meet_link_and_notify,
+    await generate_meet_link_and_notify(
         appointment_id=new_app.id,
         summary=f"Appointment: {patient.full_name} with Dr. {slot.doctor.full_name if slot.doctor else 'Unknown'}",
         start_time_utc=slot.start_time.replace(tzinfo=IST).astimezone(timezone.utc),
@@ -484,6 +479,7 @@ async def book_appointment(
         start_time_str=slot.start_time.strftime("%H:%M"),
         end_time_str=slot.end_time.strftime("%H:%M"),
         appointment_start_utc=slot.start_time.replace(tzinfo=timezone.utc),
+        db=db,
     )
 
     res = await db.execute(
