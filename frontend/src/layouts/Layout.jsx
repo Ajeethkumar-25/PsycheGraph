@@ -16,7 +16,20 @@ import {
     Sparkles,
     CheckCircle2,
     Menu,
-    X
+    X,
+    Video,
+    FileText,
+    ClipboardList,
+    HeartPulse,
+    LineChart,
+    Trash,
+    Bell,
+    Shield,
+    Clock,
+    Activity,
+    Palette,
+    FileSignature,
+    ChevronLeft
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -31,14 +44,27 @@ export default function Layout() {
     const navigate = useNavigate();
     const location = useLocation();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const profileRef = useRef(null);
+    const sidebarProfileRef = useRef(null);
 
     const { user, successMessage } = useSelector((state) => state.auth);
+    const notifications = useSelector(state => state.settings?.notifications || {
+        appointmentReminders: false,
+        pendingNotes: false,
+        patientUpdates: false
+    });
+
+    // Check if ANY notification is turned on
+    const hasAnyNotificationEnabled = Object.values(notifications).some(val => val === true);
 
     useEffect(() => {
         function handleClickOutside(event) {
             if (profileRef.current && !profileRef.current.contains(event.target)) {
+                setIsProfileOpen(false);
+            }
+            if (sidebarProfileRef.current && !sidebarProfileRef.current.contains(event.target)) {
                 setIsProfileOpen(false);
             }
         }
@@ -46,7 +72,7 @@ export default function Layout() {
         return () => {
             document.removeEventListener("mousedown", handleClickOutside);
         };
-    }, [profileRef]);
+    }, [profileRef, sidebarProfileRef]);
 
     useEffect(() => {
         if (successMessage) {
@@ -121,8 +147,22 @@ export default function Layout() {
         ];
     } else if (userRole === 'ADMIN' || userRole === 'HOSPITAL') {
         navItems = [
+            'MAIN',
             { name: 'Dashboard', path: '/hospital-admin', icon: LayoutDashboard },
-            { name: 'Staff Management', path: '/hospital-admin/users', icon: Users },
+            { name: 'Users', path: '/hospital-admin/users', icon: Users },
+            { name: 'Roles & Permissions', path: '/hospital-admin/roles', icon: Shield },
+            'CLINIC',
+            { name: 'Clinic Settings', path: '/hospital-admin/clinic-settings', icon: Building2 },
+            { name: 'Working Hours', path: '/hospital-admin/working-hours', icon: Clock },
+            { name: 'Appointments Overview', path: '/hospital-admin/appointments', icon: Calendar },
+            'INSIGHTS',
+            { name: 'Analytics', path: '/hospital-admin/analytics', icon: LineChart },
+            { name: 'Usage Activity', path: '/hospital-admin/activity', icon: Activity },
+            'SYSTEM',
+            { name: 'Notifications', path: '/hospital-admin/notifications', icon: Bell },
+            { name: 'Branding', path: '/hospital-admin/branding', icon: Palette },
+            { name: 'Audit Logs (Read-only)', path: '/hospital-admin/audit-logs', icon: FileSignature },
+            { name: 'Settings', path: '/hospital-admin/settings', icon: Settings },
         ];
     } else if (userRole === 'RECEPTIONIST') {
         navItems = [
@@ -133,9 +173,16 @@ export default function Layout() {
     } else {
         // Doctor
         navItems = [
-            { name: 'Dashboard', path: '/', icon: LayoutDashboard },
-            { name: 'Patients', path: '/patients', icon: Users },
-            { name: 'Sessions', path: '/sessions', icon: FileAudio },
+            { name: 'Dashboard', path: '/doctor', icon: LayoutDashboard },
+            { name: 'My Patient', path: '/doctor/patients', icon: Users },
+            { name: 'Appointments', path: '/doctor/schedule', icon: Calendar },
+            { name: 'Live Session', path: '/sessions', icon: Video },
+            { name: 'SOAP Notes', path: '/doctor/soap-notes', icon: FileText },
+            { name: 'Session Summaries', path: '/doctor/summaries', icon: ClipboardList },
+            { name: 'Treatment Plans', path: '/doctor/treatment-plans', icon: HeartPulse },
+            { name: 'Longitudinal Trends', path: '/doctor/trends', icon: LineChart },
+            { name: 'Deleted Records', path: '/doctor/deleted', icon: Trash },
+            { name: 'Settings', path: '/doctor/settings', icon: Settings },
         ];
     }
 
@@ -205,37 +252,71 @@ export default function Layout() {
             <motion.aside
                 initial={false}
                 animate={{
-                    x: isDesktop ? 0 : (isSidebarOpen ? 0 : '-100%')
+                    x: isDesktop ? 0 : (isSidebarOpen ? 0 : '-100%'),
+                    width: isDesktop ? (isSidebarCollapsed ? 88 : 288) : 288
                 }}
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
                 className="w-72 fixed lg:relative inset-y-0 left-0 z-50 bg-[#062f3f] border-r border-white/5 flex flex-col shadow-2xl"
             >
                 {/* Logo Section */}
-                <div className="p-6 pb-4 flex items-center justify-between gap-3 border-b border-white/5">
-                    <div className="flex items-center gap-3">
+                <div className={cn(
+                    "p-6 pb-4 flex items-center gap-3 border-b border-white/5 transition-all",
+                    isSidebarCollapsed ? "justify-center px-2" : "justify-between"
+                )}>
+                    <div className="flex items-center gap-3 w-full">
                         <motion.div
                             whileHover={{ scale: 1.05, rotate: 5 }}
-                            className="bg-gradient-to-br from-blue-500 to-cyan-500 p-2 rounded-xl text-white shadow-lg shadow-cyan-500/30"
+                            className="bg-gradient-to-br from-blue-500 to-cyan-500 p-2 rounded-xl text-white shadow-lg shadow-cyan-500/30 flex-shrink-0"
                         >
                             <BrainCircuit size={24} />
                         </motion.div>
-                        <div>
-                            <span className="text-xl font-black text-white tracking-tight block leading-none">PsycheGraph</span>
-                            <span className="text-[9px] font-semibold text-cyan-400 uppercase tracking-wider mt-0.5 block opacity-80">Healthcare Platform</span>
-                        </div>
+                        {!isSidebarCollapsed && (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="flex-1 overflow-hidden"
+                            >
+                                <span className="text-xl font-black text-white tracking-tight block leading-none truncate" title={user?.clinicName || "PsycheGraph"}>
+                                    {user?.clinicName || "PsycheGraph"}
+                                </span>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <span className={cn(
+                                        "text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded",
+                                        roleConfig.bg, roleConfig.text
+                                    )}>
+                                        {roleConfig.label}
+                                    </span>
+                                </div>
+                            </motion.div>
+                        )}
                     </div>
                     {/* Close button for mobile */}
-                    <button
-                        onClick={() => setIsSidebarOpen(false)}
-                        className="lg:hidden p-1.5 hover:bg-white/5 rounded-lg transition-colors"
-                    >
-                        <X size={18} className="text-white/60" />
-                    </button>
+                    {!isDesktop && (
+                        <button
+                            onClick={() => setIsSidebarOpen(false)}
+                            className="p-1.5 hover:bg-white/5 rounded-lg transition-colors flex-shrink-0"
+                        >
+                            <X size={18} className="text-white/60" />
+                        </button>
+                    )}
                 </div>
 
-                <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto custom-scrollbar">
-                    <p className="px-3 text-[10px] font-semibold text-white/30 uppercase tracking-wider mb-3">Navigation</p>
-                    {navItems.map((item) => {
+                <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+                    {navItems.map((item, index) => {
+                        // Handle Group Headers
+                        if (typeof item === 'string') {
+                            if (isSidebarCollapsed) {
+                                return <div key={`group-${index}`} className="h-6" />; // Spacing when collapsed
+                            }
+                            return (
+                                <p key={`group-${index}`} className="px-3 pt-4 pb-2 text-[10px] font-semibold text-white/30 uppercase tracking-wider">
+                                    {item}
+                                </p>
+                            );
+                        }
+
+                        // Handle Normal Navigation Links
                         const isActive = location.pathname === item.path;
                         return (
                             <Link
@@ -254,12 +335,20 @@ export default function Layout() {
                                     )}
                                 >
                                     <div className={cn(
-                                        "relative z-10 transition-all",
+                                        "relative z-10 transition-all flex-shrink-0",
                                         isActive && "text-cyan-400"
                                     )}>
                                         <item.icon size={18} strokeWidth={2.5} />
                                     </div>
-                                    <span className="relative z-10 font-bold text-sm tracking-tight">{item.name}</span>
+                                    {!isSidebarCollapsed && (
+                                        <motion.span
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            className="relative z-10 font-bold text-[13px] tracking-tight truncate flex-1"
+                                        >
+                                            {item.name}
+                                        </motion.span>
+                                    )}
                                     {isActive && (
                                         <motion.div
                                             layoutId="nav-indicator"
@@ -301,9 +390,19 @@ export default function Layout() {
                     </div>
 
                     <div className="flex items-center gap-2 lg:gap-4">
+                        {/* Notifications Bell (Only shows if ANY setting is toggled ON) */}
+                        {userRole === 'DOCTOR' && hasAnyNotificationEnabled && (
+                            <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                className="relative p-2.5 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-white/5 group"
+                            >
+                                <Bell size={20} className="text-white/80 group-hover:text-white transition-colors" />
+                                <span className="absolute top-2 right-2.5 w-2 h-2 rounded-full bg-red-500 ring-2 ring-[#062f3f]" />
+                            </motion.button>
+                        )}
 
-
-                        <div className="hidden sm:block h-10 w-px bg-slate-200 mx-2" />
+                        <div className="hidden sm:block h-10 w-px bg-slate-200/20 mx-2" />
 
                         {/* Profile Dropdown */}
                         <div className="relative" ref={profileRef}>

@@ -31,6 +31,7 @@ export default function Register() {
 
     const [showPassword, setShowPassword] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [localError, setLocalError] = useState('');
     const [formData, setFormData] = useState({
         email: '',
         full_name: '',
@@ -38,8 +39,24 @@ export default function Register() {
         license_key: ''
     });
 
+    useEffect(() => {
+        if (localError) setLocalError('');
+    }, [formData.email]);
+
+    const validateEmail = (email) => {
+        const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return regex.test(email);
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setLocalError('');
+        dispatch(clearError());
+
+        if (!validateEmail(formData.email)) {
+            setLocalError('Please enter a valid email address.');
+            return;
+        }
 
         try {
             await dispatch(registerHospital(formData)).unwrap();
@@ -154,7 +171,7 @@ export default function Register() {
 
                         <form onSubmit={handleSubmit} className="space-y-5">
                             <AnimatePresence>
-                                {error && (
+                                {(error || localError) && (
                                     <motion.div
                                         initial={{ opacity: 0, height: 0 }}
                                         animate={{ opacity: 1, height: "auto" }}
@@ -162,7 +179,7 @@ export default function Register() {
                                         className="bg-red-50 border border-red-100 rounded-xl p-4 flex items-center gap-3 text-red-600 text-sm overflow-hidden"
                                     >
                                         <AlertCircle size={18} className="shrink-0" />
-                                        <p className="font-medium">{error}</p>
+                                        <p className="font-medium">{localError || error}</p>
                                     </motion.div>
                                 )}
                             </AnimatePresence>

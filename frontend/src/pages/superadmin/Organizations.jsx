@@ -36,13 +36,22 @@ export default function Organizations() {
         }
     };
 
+    const validateEmail = (email) => {
+        const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return regex.test(email);
+    };
+
     const handleAddOrg = async (e) => {
         e.preventDefault();
+        if (!validateEmail(formData.email)) {
+            alert('Please enter a valid email address.');
+            return;
+        }
         setIsSubmitting(true);
         try {
             await dispatch(createOrganization(formData)).unwrap();
             setIsModalOpen(false);
-            setFormData({ name: '', license_key: '' });
+            setFormData({ name: '', email: '', license_key: '' });
         } catch (error) {
             alert(error);
         } finally {
@@ -183,8 +192,8 @@ export default function Organizations() {
                                         key={i}
                                         onClick={() => setCurrentPage(i + 1)}
                                         className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${currentPage === i + 1
-                                                ? "bg-primary-600 text-white shadow-md shadow-primary-200"
-                                                : "bg-white text-slate-600 border border-slate-200 hover:border-primary-300 hover:text-primary-600"
+                                            ? "bg-primary-600 text-white shadow-md shadow-primary-200"
+                                            : "bg-white text-slate-600 border border-slate-200 hover:border-primary-300 hover:text-primary-600"
                                             }`}
                                     >
                                         {i + 1}
@@ -260,7 +269,7 @@ export default function Organizations() {
                                 </div>
                             </div>
 
-                             
+
 
                             <div className="bg-amber-50 rounded-xl p-4 flex gap-3 border border-amber-100 mt-2">
                                 <ShieldAlert size={20} className="text-amber-600 shrink-0" />

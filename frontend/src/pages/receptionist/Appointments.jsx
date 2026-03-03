@@ -52,11 +52,6 @@ export default function ReceptionistAppointments() {
         currentUser?.assigned_doctor_name || currentUser?.assigned_doctor?.full_name ||
         currentUser?.details?.doctor_name;
 
-    // Fix: Only use currentUser.specialization if the user is actually a doctor. 
-    // Otherwise, this field likely belongs to the receptionist (e.g. "receptionist").
-    const assignedDoctorRole = currentUser?.role === 'DOCTOR' ? (currentUser?.specialization || currentUser?.details?.specialization) :
-        (currentUser?.doctor?.specialization || 'General Physician');
-
     const assignedDoctorMeta = currentUser?.doctor?.qualifications || currentUser?.qualifications ||
         currentUser?.details?.qualifications;
 
@@ -67,7 +62,7 @@ export default function ReceptionistAppointments() {
         users.find(u => String(u.id) === String(assignedDoctorId))?.name ||
         (assignedDoctorId ? `Doctor #${assignedDoctorId.toString().slice(-4)}` : "Assigned Doctor");
 
-    // Fallback: If doctors list is empty (due to restricted admin endpoint), 
+    // Fallback: If doctors list is empty (due to restricted admin endpoint),
     // we use a synthetic list containing at least the assigned doctor.
     const displayDoctors = useMemo(() => {
         const doctors = users.filter(u => u.role === 'DOCTOR');
@@ -78,12 +73,11 @@ export default function ReceptionistAppointments() {
                 id: assignedDoctorId,
                 full_name: resolvedDoctorName,
                 role: 'DOCTOR',
-                specialization: assignedDoctorRole,
                 metadata: assignedDoctorMeta
             });
         }
         return list;
-    }, [users, assignedDoctorId, resolvedDoctorName, assignedDoctorRole, assignedDoctorMeta]);
+    }, [users, assignedDoctorId, resolvedDoctorName, assignedDoctorMeta]);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -110,11 +104,8 @@ export default function ReceptionistAppointments() {
     useEffect(() => {
         dispatch(fetchAppointments());
         dispatch(fetchPatients());
-        // Only fetch users if user has administrative permissions
-        if (currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN') {
-            dispatch(fetchUsers());
-        }
-    }, [dispatch, currentUser?.role]);
+        dispatch(fetchUsers());
+    }, [dispatch]);
 
     useEffect(() => {
         // Generate next 30 days
@@ -553,7 +544,7 @@ export default function ReceptionistAppointments() {
                                                             </div>
                                                             <div className="flex-1 min-w-0">
                                                                 <h4 className="font-bold text-lg text-slate-900 truncate">Dr. {selectedDoctor.full_name}</h4>
-                                                                <p className="text-sm text-slate-500 truncate font-medium">{selectedDoctor.specialization || 'General Physician'}</p>
+                                                                <p className="text-sm text-slate-500 truncate font-medium">{selectedDoctor.role === 'DOCTOR' ? 'Doctor' : ''}</p>
                                                                 <div className="flex items-center gap-1 mt-1 text-xs text-slate-400">
                                                                     <span>{selectedDoctor.metadata || 'MBBS, MD • English, Hindi'}</span>
                                                                 </div>
@@ -593,7 +584,7 @@ export default function ReceptionistAppointments() {
                                                     </div>
                                                     <div>
                                                         <div className="font-bold text-sm text-slate-900">Dr. {selectedDoctor.full_name}</div>
-                                                        <div className="text-xs text-slate-500">{selectedDoctor.specialization}</div>
+
                                                     </div>
                                                 </div>
                                             )}

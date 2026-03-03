@@ -33,12 +33,12 @@ const AllLoginService = {
     },
 
     registerDoctor: async (userData) => {
-        const response = await api.post('/auth/register/doctor', userData);
+        const response = await api.post('/admin/doctors', userData);
         return response.data;
     },
 
     registerReceptionist: async (userData) => {
-        const response = await api.post('/auth/register/receptionist', userData);
+        const response = await api.post('/admin/receptionists', userData);
         return response.data;
     }
 };

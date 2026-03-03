@@ -62,8 +62,8 @@ const AllUserService = {
 
     createUser: async (role, userData) => {
         let endpoint = '/auth/register/user'; // Default placeholder
-        if (role === 'DOCTOR') endpoint = '/auth/register/doctor';
-        else if (role === 'RECEPTIONIST') endpoint = '/auth/register/receptionist';
+        if (role === 'DOCTOR') endpoint = '/admin/doctors';
+        else if (role === 'RECEPTIONIST') endpoint = '/admin/receptionists';
         else if (role === 'HOSPITAL') endpoint = '/auth/register/hospital';
 
         // Strip fields not allowed by backend schemas

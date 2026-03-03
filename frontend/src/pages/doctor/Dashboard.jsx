@@ -18,7 +18,8 @@ import {
     History,
     Search,
     UserCheck,
-    Briefcase
+    Briefcase,
+    Video
 } from 'lucide-react';
 import { fetchAppointments } from '../../store/slices/AppointmentSlice';
 import { fetchPatients } from '../../store/slices/PatientSlice';
@@ -84,31 +85,40 @@ export default function DoctorDashboard() {
 
     const stats = [
         {
-            label: 'Total Patients',
+            label: 'Active Patients',
             value: patients.length,
             icon: Users,
             color: 'from-indigo-600 to-blue-500',
             glow: 'shadow-blue-500/20',
-            trend: '+12%',
+            trend: '+2 this month',
             subLabel: 'Total active cases'
         },
         {
-            label: 'Today\'s Sessions',
-            value: todaysAppointments.length,
-            icon: Calendar,
+            label: 'Sessions This Week',
+            value: '12', // Mocked value for now
+            icon: Video,
             color: 'from-violet-600 to-purple-500',
             glow: 'shadow-purple-500/20',
-            trend: 'Busy',
-            subLabel: `${todaysAppointments.filter(app => app.status === 'COMPLETED').length} completed`
+            trend: '3 remaining',
+            subLabel: 'Weekly load'
         },
         {
-            label: 'Clinical Hours',
-            value: '6.5',
-            icon: Clock,
+            label: 'Pending Notes',
+            value: '5', // Mocked value
+            icon: FileText,
+            color: 'from-amber-500 to-orange-500',
+            glow: 'shadow-orange-500/20',
+            trend: 'Due today: 2',
+            subLabel: 'Action required'
+        },
+        {
+            label: 'Upcoming Appointments',
+            value: todaysAppointments.length,
+            icon: Calendar,
             color: 'from-emerald-600 to-teal-500',
             glow: 'shadow-emerald-500/20',
-            trend: 'Optimized',
-            subLabel: 'Across 8 sessions'
+            trend: 'Next: 2:00 PM',
+            subLabel: 'View schedule'
         },
     ];
 
@@ -171,7 +181,7 @@ export default function DoctorDashboard() {
             </motion.div>
 
             {/* Stats Visualization */}
-            <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
                 {stats.map((stat, index) => {
                     const Icon = stat.icon;
                     return (

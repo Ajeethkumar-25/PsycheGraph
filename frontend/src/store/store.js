@@ -6,6 +6,7 @@ import orgReducer from './slices/OrgSlice';
 import userReducer from './slices/AllUserSlice';
 import appointmentReducer from './slices/AppointmentSlice';
 import statsReducer from './slices/StatsSlice';
+import settingsReducer from './slices/SettingsSlice';
 
 export const store = configureStore({
     reducer: {
@@ -16,6 +17,7 @@ export const store = configureStore({
         users: userReducer,
         appointments: appointmentReducer,
         stats: statsReducer,
+        settings: settingsReducer,
     },
 });
 

@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchPatients, deletePatient } from '../../store/slices/PatientSlice';
 import { fetchAppointments, rescheduleAppointment, createAvailability } from '../../store/slices/AppointmentSlice';
-import { Search, PlayCircle, Trash2, FileText, Database, ChevronLeft, ChevronRight, Edit3, X } from 'lucide-react';
+import { Search, PlayCircle, Trash2, FileText, Database, ChevronLeft, ChevronRight, Edit3, X, Eye, Video, Trash } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -38,6 +38,7 @@ export default function DoctorPatients() {
     const { list: appointments } = useSelector((state) => state.appointments);
     const { user } = useSelector((state) => state.auth);
     const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('All Status');
 
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 6;
@@ -118,10 +119,17 @@ export default function DoctorPatients() {
         dispatch(fetchAppointments());
     }, [dispatch]);
 
-    const filteredPatients = patients.filter(patient =>
-        patient.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        patient.contact_number?.includes(searchQuery)
-    );
+    const filteredPatients = patients.filter(patient => {
+        const matchesSearch = patient.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            patient.contact_number?.includes(searchQuery);
+
+        // As there is no explicit native status property, we are mocking Active/Discharged for UI purposes.
+        // In a real app this would check `patient.status`
+        const mockStatus = 'Active'; // Mocked to 'Active' as per current UI
+        const matchesStatus = statusFilter === 'All Status' || mockStatus === statusFilter;
+
+        return matchesSearch && matchesStatus;
+    });
 
     // Reset pagination when search query changes
     useEffect(() => {
@@ -217,32 +225,49 @@ export default function DoctorPatients() {
                     <h2 className="text-2xl font-bold text-slate-900">My Patients</h2>
                     <p className="text-slate-500">Manage your assigned cases</p>
                 </div>
-                <div className="relative w-full sm:w-72 group">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                        <Search size={16} className="text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
-                    </div>
-                    <input
-                        type="text"
-                        placeholder="Search name or phone..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
-                    />
-                </div>
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                {/* Table Header Controls */}
+                <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/50">
+                    <div className="relative w-full sm:w-[400px] group">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                            <Search size={16} className="text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                        </div>
+                        <input
+                            type="text"
+                            placeholder="Search patients..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all transition-colors"
+                        />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <select
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value)}
+                            className="w-full sm:w-36 px-4 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium text-slate-700 cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2394a3b8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E')] bg-[length:10px_10px] bg-no-repeat bg-[position:right_1rem_center]"
+                        >
+                            <option value="All Status">All Status</option>
+                            <option value="Active">Active</option>
+                            <option value="Discharged">Discharged</option>
+                        </select>
+                    </div>
+                </div>
+
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
                         <thead className="bg-slate-50 text-slate-500 text-sm font-semibold border-b border-slate-100">
                             <tr>
                                 <th className="px-6 py-4 whitespace-nowrap text-sm">Patient Name</th>
-                                <th className="px-6 py-4 whitespace-nowrap text-sm">Date of Birth</th>
-                                <th className="px-6 py-4 whitespace-nowrap text-sm">Phone</th>
-                                <th className="px-6 py-4 whitespace-nowrap text-sm">Session</th>
+                                <th className="px-6 py-4 whitespace-nowrap text-sm">Age</th>
+                                <th className="px-6 py-4 whitespace-nowrap text-sm">Diagnosis</th>
+                                <th className="px-6 py-4 whitespace-nowrap text-sm">Last Session</th>
+                                <th className="px-6 py-4 whitespace-nowrap text-sm">Status</th>
                                 <th className="px-6 py-4 whitespace-nowrap text-sm">Meet Link</th>
-                                <th className="px-6 py-4 whitespace-nowrap text-sm">Reschedule</th>
-
+                                <th className="px-6 py-4 whitespace-nowrap text-sm">Notes</th>
+                                <th className="px-6 py-4 whitespace-nowrap text-sm">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -273,52 +298,59 @@ export default function DoctorPatients() {
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <p className="text-sm text-slate-600 font-medium">{patient.date_of_birth || '--'}</p>
+                                                <p className="text-sm text-slate-600 font-medium">
+                                                    {patient.patient_age || '--'}
+                                                </p>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <p className="text-sm text-slate-600 font-medium">{patient.contact_number || '--'}</p>
+                                                <p className="text-sm text-slate-600 font-medium">
+                                                    {/* Using mock diagnosis as there isn't a native one explicitly shown yet */}
+                                                    {patient.diagnosis || 'Generalized Anxiety Disorder'}
+                                                </p>
                                             </td>
                                             <td className="px-6 py-4">
-                                                {nextApp ? (
-                                                    <div className="flex flex-col">
-                                                        <span className="font-semibold text-slate-900 text-sm">
-                                                            {new Date(nextApp.start_time).toLocaleDateString()}
-                                                        </span>
-                                                        <span className="text-slate-500 text-xs">
-                                                            {new Date(nextApp.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                        </span>
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-sm text-slate-400">No session</span>
-                                                )}
+                                                <p className="text-sm text-slate-600 font-medium">
+                                                    {nextApp ? new Date(nextApp.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '--'}
+                                                </p>
                                             </td>
                                             <td className="px-6 py-4">
-                                                {(nextApp && nextApp.meet_link) ? (
+                                                <div className="inline-flex items-center px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-xs font-bold">
+                                                    Active
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {nextApp && nextApp.meet_link ? (
                                                     <a
                                                         href={nextApp.meet_link}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
-                                                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors inline-block"
+                                                        className="text-slate-400 hover:text-indigo-600 transition-colors inline-block"
                                                         title="Join Google Meet"
                                                     >
-                                                        <PlayCircle size={20} className="text-indigo-600 hover:text-indigo-800" />
+                                                        <Video size={18} />
                                                     </a>
                                                 ) : (
                                                     <span className="text-sm text-slate-400">--</span>
                                                 )}
                                             </td>
                                             <td className="px-6 py-4">
-                                                {nextApp ? (
+                                                <button
+                                                    className="text-slate-400 hover:text-indigo-600 transition-colors"
+                                                    title="SOAP Notes"
+                                                >
+                                                    <FileText size={18} />
+                                                </button>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
                                                     <button
-                                                        onClick={() => openRescheduleModal(nextApp)}
-                                                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold"
-                                                        title="Reschedule Session"
+                                                        onClick={() => handleDelete(patient.id)}
+                                                        className="text-slate-400 hover:text-red-500 transition-colors"
+                                                        title="Delete Patient"
                                                     >
-                                                        <Edit3 size={16} /> Reschedule
+                                                        <Trash size={18} />
                                                     </button>
-                                                ) : (
-                                                    <span className="text-sm text-slate-400">--</span>
-                                                )}
+                                                </div>
                                             </td>
                                         </tr>
                                     );

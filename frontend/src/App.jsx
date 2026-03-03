@@ -11,6 +11,16 @@ import SuperAdminUsers from './pages/superadmin/Users';
 import HospitalDetails from './pages/superadmin/HospitalDetails';
 import AdminDashboard from './pages/admin/Dashboard';
 import AdminUsers from './pages/admin/Users';
+import AdminAppointments from './pages/admin/Apponitments';
+import Roles from './pages/admin/Roles';
+import ClinicSettings from './pages/admin/ClinicSettings';
+import WorkingHours from './pages/admin/WorkingHours';
+import Analytics from './pages/admin/Analytics';
+import ActivityPage from './pages/admin/Activity';
+import Branding from './pages/admin/Branding';
+import AuditLogs from './pages/admin/AuditLogs';
+import Notifications from './pages/admin/Notifications';
+import AdminSettings from './pages/admin/Settings';
 import ReceptionistDashboard from './pages/receptionist/Dashboard';
 import ReceptionistPatients from './pages/receptionist/Patients';
 import ReceptionistAppointments from './pages/receptionist/Appointments';
@@ -18,8 +28,12 @@ import DoctorDashboard from './pages/doctor/Dashboard';
 import DoctorPatients from './pages/doctor/Patients';
 import DoctorAppointments from './pages/doctor/Appointments';
 import DoctorSessionMode from './pages/doctor/SessionMode';
+import DoctorSettings from './pages/doctor/Settings';
 import Layout from './layouts/Layout';
 import Login from './commenlogin/Login';
+import SoapNotes from './pages/doctor/SoapNotes';
+import LongitudinalTrends from './pages/doctor/LongitudinalTrends';
+
 
 function App() {
     const { token, user } = useSelector((state) => state.auth);
@@ -84,6 +98,36 @@ function App() {
                     <Route path="/hospital-admin/users" element={
                         ((user?.role || user?.user?.role)?.toUpperCase() === 'ADMIN' || (user?.role || user?.user?.role)?.toUpperCase() === 'HOSPITAL') ? <AdminUsers /> : <Navigate to="/" />
                     } />
+                    <Route path="/hospital-admin/appointments" element={
+                        ((user?.role || user?.user?.role)?.toUpperCase() === 'ADMIN' || (user?.role || user?.user?.role)?.toUpperCase() === 'HOSPITAL') ? <AdminAppointments /> : <Navigate to="/" />
+                    } />
+                    <Route path="/hospital-admin/roles" element={
+                        ((user?.role || user?.user?.role)?.toUpperCase() === 'ADMIN' || (user?.role || user?.user?.role)?.toUpperCase() === 'HOSPITAL') ? <Roles /> : <Navigate to="/" />
+                    } />
+                    <Route path="/hospital-admin/clinic-settings" element={
+                        ((user?.role || user?.user?.role)?.toUpperCase() === 'ADMIN' || (user?.role || user?.user?.role)?.toUpperCase() === 'HOSPITAL') ? <ClinicSettings /> : <Navigate to="/" />
+                    } />
+                    <Route path="/hospital-admin/working-hours" element={
+                        ((user?.role || user?.user?.role)?.toUpperCase() === 'ADMIN' || (user?.role || user?.user?.role)?.toUpperCase() === 'HOSPITAL') ? <WorkingHours /> : <Navigate to="/" />
+                    } />
+                    <Route path="/hospital-admin/analytics" element={
+                        ((user?.role || user?.user?.role)?.toUpperCase() === 'ADMIN' || (user?.role || user?.user?.role)?.toUpperCase() === 'HOSPITAL') ? <Analytics /> : <Navigate to="/" />
+                    } />
+                    <Route path="/hospital-admin/activity" element={
+                        ((user?.role || user?.user?.role)?.toUpperCase() === 'ADMIN' || (user?.role || user?.user?.role)?.toUpperCase() === 'HOSPITAL') ? <ActivityPage /> : <Navigate to="/" />
+                    } />
+                    <Route path="/hospital-admin/notifications" element={
+                        ((user?.role || user?.user?.role)?.toUpperCase() === 'ADMIN' || (user?.role || user?.user?.role)?.toUpperCase() === 'HOSPITAL') ? <Notifications /> : <Navigate to="/" />
+                    } />
+                    <Route path="/hospital-admin/branding" element={
+                        ((user?.role || user?.user?.role)?.toUpperCase() === 'ADMIN' || (user?.role || user?.user?.role)?.toUpperCase() === 'HOSPITAL') ? <Branding /> : <Navigate to="/" />
+                    } />
+                    <Route path="/hospital-admin/audit-logs" element={
+                        ((user?.role || user?.user?.role)?.toUpperCase() === 'ADMIN' || (user?.role || user?.user?.role)?.toUpperCase() === 'HOSPITAL') ? <AuditLogs /> : <Navigate to="/" />
+                    } />
+                    <Route path="/hospital-admin/settings" element={
+                        ((user?.role || user?.user?.role)?.toUpperCase() === 'ADMIN' || (user?.role || user?.user?.role)?.toUpperCase() === 'HOSPITAL') ? <AdminSettings /> : <Navigate to="/" />
+                    } />
 
                     {/* Receptionist Routes */}
                     <Route path="/receptionist" element={
@@ -108,6 +152,15 @@ function App() {
                     } />
                     <Route path="/doctor/session/:patientId" element={
                         (user?.role || user?.user?.role)?.toUpperCase() === 'DOCTOR' ? <DoctorSessionMode /> : <Navigate to="/" />
+                    } />
+                    <Route path="/doctor/soap-notes" element={
+                        (user?.role || user?.user?.role)?.toUpperCase() === 'DOCTOR' ? <SoapNotes /> : <Navigate to="/" />
+                    } />
+                    <Route path="/doctor/settings" element={
+                        (user?.role || user?.user?.role)?.toUpperCase() === 'DOCTOR' ? <DoctorSettings /> : <Navigate to="/" />
+                    } />
+                    <Route path="/doctor/trends" element={
+                        (user?.role || user?.user?.role)?.toUpperCase() === 'DOCTOR' ? <LongitudinalTrends /> : <Navigate to="/" />
                     } />
                 </Route>
             </Routes>

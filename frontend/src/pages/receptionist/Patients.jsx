@@ -21,9 +21,6 @@ export default function ReceptionistPatients() {
         currentUser?.assigned_doctor_name || currentUser?.assigned_doctor?.full_name ||
         currentUser?.details?.doctor_name;
 
-    const assignedDoctorRole = currentUser?.role === 'DOCTOR' ? (currentUser?.specialization || currentUser?.details?.specialization) :
-        (currentUser?.doctor?.specialization || 'General Physician');
-
     const assignedDoctorMeta = currentUser?.doctor?.qualifications || currentUser?.qualifications ||
         currentUser?.details?.qualifications;
 
@@ -44,12 +41,11 @@ export default function ReceptionistPatients() {
                 id: assignedDoctorId,
                 full_name: resolvedDoctorName,
                 role: 'DOCTOR',
-                specialization: assignedDoctorRole,
                 metadata: assignedDoctorMeta
             });
         }
         return list;
-    }, [allUsers, assignedDoctorId, resolvedDoctorName, assignedDoctorRole, assignedDoctorMeta]);
+    }, [allUsers, assignedDoctorId, resolvedDoctorName, assignedDoctorMeta]);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
@@ -73,11 +69,8 @@ export default function ReceptionistPatients() {
 
     useEffect(() => {
         dispatch(fetchPatients());
-        // Only fetch doctors if user has administrative permissions
-        if (currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN') {
-            dispatch(fetchDoctors());
-        }
-    }, [dispatch, currentUser?.role]);
+        dispatch(fetchDoctors());
+    }, [dispatch]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
