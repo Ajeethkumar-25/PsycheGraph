@@ -29,6 +29,7 @@ export default function SoapNotes() {
         assessment: '',
         plan: ''
     });
+    
 
     const handleNoteChange = (field, value) => {
         setNotes(prev => ({ ...prev, [field]: value }));

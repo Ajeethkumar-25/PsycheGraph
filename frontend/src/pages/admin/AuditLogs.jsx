@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { FileSignature, Search } from 'lucide-react';
 
+
 export default function AuditLogs() {
     return (
         <div className="space-y-6">

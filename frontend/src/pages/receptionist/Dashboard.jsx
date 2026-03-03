@@ -27,6 +27,7 @@ const formatDateLocal = (date) => {
     return `${year}-${month}-${day}`;
 };
 
+
 const MiniCalendar = ({ selectedDate, onSelectDate }) => {
     const [currentDate, setCurrentDate] = useState(new Date());
 

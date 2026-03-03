@@ -47,6 +47,7 @@ export default function DoctorPatients() {
     const [rescheduleModal, setRescheduleModal] = useState({ isOpen: false, appointmentId: null, doctorId: null, patientAge: null, date: '', time: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    
     // Track booked slots for selected doctor on the selected date
     const bookedTimeSlots = useMemo(() => {
         if (!rescheduleModal.date) return new Set();

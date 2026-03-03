@@ -60,6 +60,7 @@ const AllUserService = {
         return response.data;
     },
 
+    
     createUser: async (role, userData) => {
         let endpoint = '/auth/register/user'; // Default placeholder
         if (role === 'DOCTOR') endpoint = '/admin/doctors';

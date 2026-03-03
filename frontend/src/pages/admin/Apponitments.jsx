@@ -132,6 +132,7 @@ export default function AdminAppointments() {
                                 <p className="text-slate-500 font-medium text-sm">No appointments found for this selection.</p>
                             </div>
                         )}
+                        
 
                         {!loading && selectedDateAppointments.map((app, index) => {
                             const timeStr = new Date(app.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });

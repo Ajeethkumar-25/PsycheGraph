@@ -30,6 +30,7 @@ export default function Branding() {
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
+    
     const handleSave = () => {
         setIsSaving(true);
         // Simulate API call

@@ -148,10 +148,7 @@ export default function DoctorSessionMode() {
                 formData.append('file', audioBlob, `session_${patientId}_${Date.now()}.wav`);
             }
 
-            // Mock Saving logic (replace with real endpoint if available)
-            // await dispatch(createSession(formData)).unwrap();
-
-            // Artificial delay for UI feedback
+        
             await new Promise(resolve => setTimeout(resolve, 1500));
 
             navigate('/doctor/patients');

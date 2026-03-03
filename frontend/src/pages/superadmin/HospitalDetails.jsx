@@ -22,6 +22,7 @@ import { fetchOrganizations } from '../../store/slices/OrgSlice';
 import { fetchUsers, fetchUserById, clearSelectedUser } from '../../store/slices/AllUserSlice';
 import { fetchPatients, fetchPatientById, clearSelectedPatient } from '../../store/slices/PatientSlice';
 
+
 const cn = (...classes) => classes.filter(Boolean).join(' ');
 
 export default function HospitalDetails() {

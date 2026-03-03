@@ -17,6 +17,7 @@ const loadSavedSettings = () => {
     };
 };
 
+
 const settingsSlice = createSlice({
     name: 'settings',
     initialState: {

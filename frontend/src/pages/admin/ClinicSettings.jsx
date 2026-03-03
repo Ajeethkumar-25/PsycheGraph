@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Building2, Settings } from 'lucide-react';
 
+
 export default function ClinicSettings() {
     return (
         <div className="space-y-6">

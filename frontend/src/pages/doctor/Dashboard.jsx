@@ -122,6 +122,7 @@ export default function DoctorDashboard() {
         },
     ];
 
+    
     const containerVariants = {
         hidden: { opacity: 0 },
         visible: {

@@ -122,6 +122,7 @@ export default function ReceptionistAppointments() {
                 month: d.toLocaleDateString('en-US', { month: 'short' })
             });
         }
+        
         setAvailableDates(dates);
         // Default to today if not set
         if (!formData.date) {

@@ -83,6 +83,7 @@ export default function DoctorAppointments() {
         setCurrentWeekStart(next);
     };
 
+    
     const weekRangeString = () => {
         const end = new Date(currentWeekStart);
         end.setDate(end.getDate() + 4); // Friday

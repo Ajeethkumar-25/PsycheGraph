@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Shield, Lock } from 'lucide-react';
 
+
 export default function Roles() {
     return (
         <div className="space-y-6">

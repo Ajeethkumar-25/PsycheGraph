@@ -113,6 +113,7 @@ export default function DoctorSettings() {
                             <span className={`bg-white w-4 h-4 rounded-full transition-transform transform shadow-sm ${notifications.pendingNotes ? 'translate-x-7' : 'translate-x-1'}`}></span>
                         </button>
                     </div>
+                    
                     <div className="flex items-center justify-between pt-5">
                         <div>
                             <h3 className="text-[15px] font-semibold text-[#0c3966]">Patient Updates</h3>

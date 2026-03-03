@@ -25,6 +25,7 @@ const symptomData = [
     { name: '', anxiety: 4.5, depression: 2.5 }, // More points matching the UI tail off
 ];
 
+
 const attendanceData = [
     { name: 'Jan', attended: 8.5, missed: 7, canceled: 5.5 },
     { name: 'Feb', attended: 7.5, missed: 6.5, canceled: 5 },

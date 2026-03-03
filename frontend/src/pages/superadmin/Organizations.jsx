@@ -25,6 +25,7 @@ export default function Organizations() {
     const handleDeleteOrg = async (org) => {
         if (!window.confirm(`Are you sure you want to delete ${org.name}? This action cannot be undone.`)) return;
 
+        
         setIsDeleting(org.id);
         try {
             await dispatch(deleteOrganization(org.id)).unwrap();

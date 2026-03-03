@@ -9,6 +9,7 @@ import {
     ChevronRight
 } from 'lucide-react';
 
+
 export default function WorkingHours() {
     const [schedule, setSchedule] = useState({
         Monday: { isOpen: true, start: '09:00', end: '17:00', breakStart: '12:00', breakEnd: '13:00' },

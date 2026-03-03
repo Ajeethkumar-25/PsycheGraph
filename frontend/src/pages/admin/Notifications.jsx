@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Bell, Mail } from 'lucide-react';
 
+
 export default function Notifications() {
     return (
         <div className="space-y-6">
