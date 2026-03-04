@@ -9,6 +9,7 @@ from sqlalchemy import text
 from datetime import datetime, timedelta, timezone
 from ..services.google_calendar import GoogleCalendarService
 from ..services.email import send_meet_link_email
+from ..services.vexa import send_bot_to_meeting as vexa_send_bot
 import asyncio
 import traceback
 import psycopg2
@@ -39,7 +40,6 @@ router = APIRouter(prefix="/appointments", tags=["Appointments"])
 
 def save_meet_link_sync(appointment_id: int, meet_link: str):
     """Pure sync function to save meet link — runs in a thread, no event loop needed."""
-    
     try:
         conn = psycopg2.connect(
             host="localhost",
@@ -58,6 +58,7 @@ def save_meet_link_sync(appointment_id: int, meet_link: str):
         print(f"[MEET LINK] Failed to save for appointment {appointment_id}: {e}")
         print(traceback.format_exc())
 
+
 def generate_meet_link_sync(
     appointment_id: int,
     summary: str,
@@ -74,7 +75,10 @@ def generate_meet_link_sync(
 ):
     """
     Fully synchronous background function — runs in a thread.
-    No async, no event loop — avoids all deadlock issues.
+    1. Creates Google Meet link
+    2. Saves to DB
+    3. Sends Vexa bot to transcribe
+    4. Sends email reminders
     """
     print(f"[MEET LINK] Starting for appointment {appointment_id}")
 
@@ -97,40 +101,20 @@ def generate_meet_link_sync(
         print(f"[MEET LINK] No link generated for appointment {appointment_id}")
         return
 
-    # Step 2: Save to DB
+    # Step 2: Save meet link to DB
     save_meet_link_sync(appointment_id, meet_link)
 
+    # Step 3: Send Vexa bot to transcribe the meeting
     try:
-        fireflies_api_key = os.environ.get("FIREFLIES_API_KEY", "")
-        if fireflies_api_key:
-            import requests
-            query = """
-            mutation AddToLiveMeeting($url: String!, $title: String) {
-                addToLiveMeeting(url: $url, meeting_name: $title) {
-                    success
-                    message
-                }
-            }
-            """
-            response = requests.post(
-                "https://api.fireflies.ai/graphql",
-                headers={
-                    "Authorization": f"Bearer {fireflies_api_key}",
-                    "Content-Type": "application/json"
-                },
-                json={"query": query, "variables": {"url": meet_link, "title": summary}},
-                timeout=15
-            )
-            result = response.json().get("data", {}).get("addToLiveMeeting", {})
-            if result.get("success"):
-                print(f"[FIREFLIES] Bot invited for appointment {appointment_id}")
-            else:
-                print(f"[FIREFLIES] Bot invite failed: {result.get('message')}")
+        success = vexa_send_bot(meet_link=meet_link, bot_name="PsycheGraph Bot")
+        if success:
+            print(f"[VEXA] Bot sent to meeting for appointment {appointment_id}: {meet_link}")
+        else:
+            print(f"[VEXA] Bot could not be sent for appointment {appointment_id} (non-fatal)")
     except Exception as e:
-        print(f"[FIREFLIES] Error inviting bot: {e}")
+        print(f"[VEXA] Error sending bot for appointment {appointment_id}: {e}")
 
-
-    # Step 3: Send emails
+    # Step 4: Send email reminders
     try:
         send_at = appointment_start_utc - timedelta(minutes=30)
         now = datetime.now(timezone.utc)
@@ -465,8 +449,6 @@ async def book_appointment(
 
     doctor_email = doctor_user.email if (doctor_user and doctor_user.role == models.UserRole.DOCTOR) else None
 
-    # KEY FIX: Use a real thread instead of FastAPI BackgroundTasks
-    # This returns the response immediately without waiting for Google Calendar
     thread = threading.Thread(
         target=generate_meet_link_sync,
         kwargs=dict(

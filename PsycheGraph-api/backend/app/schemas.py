@@ -152,21 +152,17 @@ class SessionBase(BaseModel):
     date: datetime
 
 
-class SessionCreate(BaseModel):
-    patient_id: int
-    doctor_id: int
-    appointment_id: Optional[int] = None
-    transcript: Optional[str] = None
-    summary: Optional[str] = None
-    soap_notes: Optional[str] = None
+class SessionCreate(SessionBase):
+    pass
 
 
 class SessionOut(SessionBase):
     id: int
-    audio_url: Optional[str]
-    transcript: Optional[str]
-    soap_note: Optional[str]
-    summary: Optional[str]
+    appointment_id: Optional[int] = None
+    audio_url: Optional[str] = None
+    transcript: Optional[str] = None
+    soap_note: Optional[str] = None
+    summary: Optional[str] = None
     version: int
 
     class Config:

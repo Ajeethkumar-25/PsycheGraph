@@ -1,122 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List, Optional
 from .. import models, schemas, dependencies, database
+from ..services.vexa import get_transcript, extract_meeting_code
 from datetime import datetime, timezone
 import logging
 import traceback
-import requests
-import os
 
 logger = logging.getLogger("sessions")
 
 router = APIRouter(prefix="/sessions", tags=["Sessions"])
-
-FIREFLIES_API_KEY = os.environ.get("FIREFLIES_API_KEY", "")
-FIREFLIES_URL = "https://api.fireflies.ai/graphql"
-
-
-def fireflies_headers():
-    return {
-        "Authorization": f"Bearer {FIREFLIES_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-
-def add_fireflies_bot(meet_link: str, title: str) -> Optional[str]:
-    """Send Fireflies bot to join a Google Meet. Returns meeting ID or None."""
-    if not FIREFLIES_API_KEY or not meet_link:
-        return None
-    try:
-        query = """
-        mutation AddToLiveMeeting($url: String!, $title: String) {
-            addToLiveMeeting(url: $url, meeting_name: $title) {
-                success
-                message
-            }
-        }
-        """
-        response = requests.post(
-            FIREFLIES_URL,
-            headers=fireflies_headers(),
-            json={"query": query, "variables": {"url": meet_link, "title": title}},
-            timeout=15
-        )
-        data = response.json()
-        result = data.get("data", {}).get("addToLiveMeeting", {})
-        if result.get("success"):
-            print(f"[FIREFLIES] Bot added to meeting: {meet_link}")
-            return meet_link
-        else:
-            print(f"[FIREFLIES] Failed to add bot: {result.get('message')}")
-            return None
-    except Exception as e:
-        print(f"[FIREFLIES] Error adding bot: {e}")
-        return None
-
-
-def fetch_fireflies_transcript(meet_link: str) -> Optional[dict]:
-    """Fetch transcript from Fireflies by searching for the meeting URL."""
-    if not FIREFLIES_API_KEY:
-        return None
-    try:
-        query = """
-        query Transcripts {
-            transcripts(limit: 10) {
-                id
-                title
-                date
-                meeting_link
-                summary {
-                    overview
-                    action_items
-                    keywords
-                }
-                sentences {
-                    text
-                    speaker_name
-                }
-            }
-        }
-        """
-        response = requests.post(
-            FIREFLIES_URL,
-            headers=fireflies_headers(),
-            json={"query": query},
-            timeout=15
-        )
-        data = response.json()
-        transcripts = data.get("data", {}).get("transcripts", [])
-
-        # Find matching transcript by meet link
-        for t in transcripts:
-            if meet_link and (
-                t.get("meeting_link") == meet_link or
-                meet_link.split("/")[-1] in (t.get("meeting_link") or "")
-            ):
-                return t
-
-        # If no match found, return the most recent one
-        if transcripts:
-            return transcripts[0]
-
-        return None
-    except Exception as e:
-        print(f"[FIREFLIES] Error fetching transcript: {e}")
-        return None
-
-
-def format_transcript(sentences: list) -> str:
-    """Format Fireflies sentences into readable transcript text."""
-    if not sentences:
-        return ""
-    lines = []
-    for s in sentences:
-        speaker = s.get("speaker_name") or "Unknown"
-        text = s.get("text") or ""
-        lines.append(f"{speaker}: {text}")
-    return "\n".join(lines)
 
 
 # -------------------------------------------------------------------
@@ -165,7 +59,111 @@ async def create_session(
 
 
 # -------------------------------------------------------------------
-# Fetch transcript from Fireflies and save to session
+# Vexa Webhook — Vexa calls this when meeting ends and transcript ready
+# POST /sessions/vexa/webhook
+# Register this URL in Vexa dashboard once:
+#   https://65.1.249.160/sessions/vexa/webhook
+#
+# Vexa payload contains:
+#   meeting_id   — the Google Meet code  (e.g. abc-defg-hij)
+#   transcript   — array of {speaker, text} segments
+# -------------------------------------------------------------------
+
+@router.post("/vexa/webhook")
+async def vexa_webhook(
+    request: Request,
+    db: AsyncSession = Depends(database.get_db)
+):
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    logger.info(f"[VEXA WEBHOOK] Received payload keys: {list(payload.keys())}")
+
+    # Extract meeting code — Vexa sends native_meeting_id or meeting_id
+    meeting_code = (
+        payload.get("native_meeting_id")
+        or payload.get("meeting_id")
+        or payload.get("meetingId")
+    )
+    if not meeting_code:
+        logger.error(f"[VEXA WEBHOOK] No meeting_id in payload: {payload}")
+        raise HTTPException(status_code=400, detail="Missing meeting_id in payload")
+
+    # Find appointment by meet_link containing this meeting code
+    apt_res = await db.execute(
+        select(models.Appointment).where(
+            models.Appointment.meet_link.ilike(f"%{meeting_code}%")
+        )
+    )
+    appointment = apt_res.scalars().first()
+    if not appointment:
+        logger.error(f"[VEXA WEBHOOK] No appointment found for meeting code: {meeting_code}")
+        raise HTTPException(status_code=404, detail=f"No appointment found for meeting: {meeting_code}")
+
+    logger.info(f"[VEXA WEBHOOK] Matched appointment {appointment.id} for meeting {meeting_code}")
+
+    # Build transcript text from payload segments (if included in webhook)
+    # Otherwise fetch from Vexa API
+    transcript_text = ""
+    segments = payload.get("transcript") or payload.get("segments") or []
+
+    if segments:
+        lines = []
+        for seg in segments:
+            speaker = seg.get("speaker") or seg.get("speaker_name") or "Unknown"
+            text = (seg.get("text") or "").strip()
+            if text:
+                lines.append(f"[{speaker}]: {text}")
+        transcript_text = "\n".join(lines)
+        logger.info(f"[VEXA WEBHOOK] Built transcript from webhook payload — {len(segments)} segments")
+    else:
+        # Fetch transcript from Vexa API
+        logger.info(f"[VEXA WEBHOOK] No segments in payload — fetching from Vexa API")
+        transcript_data = get_transcript(meeting_code)
+        if transcript_data:
+            transcript_text = transcript_data.get("transcript", "")
+        else:
+            logger.warning(f"[VEXA WEBHOOK] Could not fetch transcript for {meeting_code}")
+
+    # Check if session already exists for this appointment
+    session_res = await db.execute(
+        select(models.Session).where(
+            models.Session.appointment_id == appointment.id
+        )
+    )
+    existing_session = session_res.scalars().first()
+
+    if existing_session:
+        existing_session.transcript = transcript_text
+        existing_session.version += 1
+        await db.commit()
+        await db.refresh(existing_session)
+        logger.info(f"[VEXA WEBHOOK] Updated session {existing_session.id} for appointment {appointment.id}")
+    else:
+        new_session = models.Session(
+            patient_id=appointment.patient_id,
+            doctor_id=appointment.doctor_id,
+            appointment_id=appointment.id,
+            created_by_id=appointment.doctor_id,
+            session_date=datetime.now(timezone.utc),
+            transcript=transcript_text,
+            summary="",
+            soap_notes=""
+        )
+        db.add(new_session)
+        await db.commit()
+        await db.refresh(new_session)
+        logger.info(f"[VEXA WEBHOOK] Created new session for appointment {appointment.id}")
+
+    return {"status": "ok", "appointment_id": appointment.id, "meeting_code": meeting_code}
+
+
+# -------------------------------------------------------------------
+# Manually fetch transcript from Vexa for an appointment
+# POST /sessions/{appointment_id}/fetch-transcript
+# Use this if webhook failed or for testing
 # -------------------------------------------------------------------
 
 @router.post("/{appointment_id}/fetch-transcript", response_model=schemas.SessionOut)
@@ -178,7 +176,6 @@ async def fetch_and_save_transcript(
     ])),
     db: AsyncSession = Depends(database.get_db)
 ):
-    # Get appointment to find meet_link and patient info
     apt_res = await db.execute(
         select(models.Appointment).where(models.Appointment.id == appointment_id)
     )
@@ -188,33 +185,31 @@ async def fetch_and_save_transcript(
     if not appointment.meet_link:
         raise HTTPException(status_code=400, detail="No meet link found for this appointment")
 
-    # Fetch transcript from Fireflies
-    fireflies_data = fetch_fireflies_transcript(appointment.meet_link)
-    if not fireflies_data:
-        raise HTTPException(status_code=404, detail="No transcript found on Fireflies yet. Meeting may still be processing.")
+    meeting_code = extract_meeting_code(appointment.meet_link)
+    if not meeting_code:
+        raise HTTPException(status_code=400, detail="Could not extract meeting code from meet link")
 
-    # Format transcript text
-    transcript_text = format_transcript(fireflies_data.get("sentences", []))
-    summary_text = ""
-    if fireflies_data.get("summary"):
-        summary_text = fireflies_data["summary"].get("overview") or ""
+    transcript_data = get_transcript(meeting_code)
+    if not transcript_data:
+        raise HTTPException(
+            status_code=404,
+            detail="No transcript found on Vexa yet — meeting may still be processing"
+        )
 
-    # Check if session already exists for this appointment
+    transcript_text = transcript_data.get("transcript", "")
+
     session_res = await db.execute(
         select(models.Session).where(models.Session.appointment_id == appointment_id)
     )
     existing_session = session_res.scalars().first()
 
     if existing_session:
-        # Update existing session
         existing_session.transcript = transcript_text
-        existing_session.summary = summary_text
         existing_session.version += 1
         await db.commit()
         await db.refresh(existing_session)
         return existing_session
     else:
-        # Create new session
         new_session = models.Session(
             patient_id=appointment.patient_id,
             doctor_id=appointment.doctor_id,
@@ -222,7 +217,7 @@ async def fetch_and_save_transcript(
             created_by_id=current_user.id,
             session_date=datetime.now(timezone.utc),
             transcript=transcript_text,
-            summary=summary_text,
+            summary="",
             soap_notes=""
         )
         db.add(new_session)
