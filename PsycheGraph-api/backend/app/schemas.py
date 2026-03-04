@@ -152,8 +152,18 @@ class SessionBase(BaseModel):
     date: datetime
 
 
-class SessionCreate(SessionBase):
-    pass
+class SOAPNote(BaseModel):
+    subjective: Optional[str] = None    # Patient's symptoms, complaints, history
+    objective: Optional[str] = None     # Doctor's observations, vitals, exam findings
+    assessment: Optional[str] = None    # Diagnosis / clinical impression
+    plan: Optional[str] = None          # Treatment plan, medications, follow-up
+
+
+class SessionCreate(BaseModel):
+    patient_id: int
+    doctor_id: int
+    appointment_id: Optional[int] = None
+    soap_notes: Optional[SOAPNote] = None
 
 
 class SessionOut(SessionBase):
@@ -161,9 +171,20 @@ class SessionOut(SessionBase):
     appointment_id: Optional[int] = None
     audio_url: Optional[str] = None
     transcript: Optional[str] = None
-    soap_note: Optional[str] = None
+    soap_notes: Optional[SOAPNote] = None
     summary: Optional[str] = None
     version: int
+
+    @field_validator("soap_notes", mode="before")
+    @classmethod
+    def parse_soap_notes(cls, v):
+        if isinstance(v, str):
+            try:
+                import json
+                return json.loads(v)
+            except Exception:
+                return None
+        return v
 
     class Config:
         from_attributes = True
@@ -273,5 +294,5 @@ class AppointmentReschedule(BaseModel):
 
 class SessionUpdate(BaseModel):
     transcript: Optional[str] = None
-    soap_note: Optional[str] = None
+    soap_notes: Optional[SOAPNote] = None
     summary: Optional[str] = None

@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List, Optional
 from .. import models, schemas, dependencies, database
-from ..services.vexa import get_transcript, extract_meeting_code
+from ..services.fireflies import get_transcript
+import json
 from datetime import datetime, timezone
 import logging
 import traceback
@@ -14,7 +15,7 @@ router = APIRouter(prefix="/sessions", tags=["Sessions"])
 
 
 # -------------------------------------------------------------------
-# Create Session manually (without audio)
+# Create Session manually
 # -------------------------------------------------------------------
 
 @router.post("/", response_model=schemas.SessionOut)
@@ -41,15 +42,18 @@ async def create_session(
     if patient.organization_id != current_user.organization_id:
         raise HTTPException(status_code=403, detail="Patient not in your organization")
 
+    # Serialize SOAPNote to JSON string for storage
+    soap_notes_str = None
+    if session_in.soap_notes:
+        soap_notes_str = json.dumps(session_in.soap_notes.model_dump())
+
     new_session = models.Session(
         patient_id=session_in.patient_id,
         doctor_id=actual_doctor_id,
         appointment_id=session_in.appointment_id,
         created_by_id=current_user.id,
         session_date=datetime.now(timezone.utc),
-        transcript=session_in.transcript,
-        summary=session_in.summary,
-        soap_notes=session_in.soap_notes,
+        soap_notes=soap_notes_str,
     )
 
     db.add(new_session)
@@ -59,111 +63,11 @@ async def create_session(
 
 
 # -------------------------------------------------------------------
-# Vexa Webhook — Vexa calls this when meeting ends and transcript ready
-# POST /sessions/vexa/webhook
-# Register this URL in Vexa dashboard once:
-#   https://65.1.249.160/sessions/vexa/webhook
-#
-# Vexa payload contains:
-#   meeting_id   — the Google Meet code  (e.g. abc-defg-hij)
-#   transcript   — array of {speaker, text} segments
-# -------------------------------------------------------------------
-
-@router.post("/vexa/webhook")
-async def vexa_webhook(
-    request: Request,
-    db: AsyncSession = Depends(database.get_db)
-):
-    try:
-        payload = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
-
-    logger.info(f"[VEXA WEBHOOK] Received payload keys: {list(payload.keys())}")
-
-    # Extract meeting code — Vexa sends native_meeting_id or meeting_id
-    meeting_code = (
-        payload.get("native_meeting_id")
-        or payload.get("meeting_id")
-        or payload.get("meetingId")
-    )
-    if not meeting_code:
-        logger.error(f"[VEXA WEBHOOK] No meeting_id in payload: {payload}")
-        raise HTTPException(status_code=400, detail="Missing meeting_id in payload")
-
-    # Find appointment by meet_link containing this meeting code
-    apt_res = await db.execute(
-        select(models.Appointment).where(
-            models.Appointment.meet_link.ilike(f"%{meeting_code}%")
-        )
-    )
-    appointment = apt_res.scalars().first()
-    if not appointment:
-        logger.error(f"[VEXA WEBHOOK] No appointment found for meeting code: {meeting_code}")
-        raise HTTPException(status_code=404, detail=f"No appointment found for meeting: {meeting_code}")
-
-    logger.info(f"[VEXA WEBHOOK] Matched appointment {appointment.id} for meeting {meeting_code}")
-
-    # Build transcript text from payload segments (if included in webhook)
-    # Otherwise fetch from Vexa API
-    transcript_text = ""
-    segments = payload.get("transcript") or payload.get("segments") or []
-
-    if segments:
-        lines = []
-        for seg in segments:
-            speaker = seg.get("speaker") or seg.get("speaker_name") or "Unknown"
-            text = (seg.get("text") or "").strip()
-            if text:
-                lines.append(f"[{speaker}]: {text}")
-        transcript_text = "\n".join(lines)
-        logger.info(f"[VEXA WEBHOOK] Built transcript from webhook payload — {len(segments)} segments")
-    else:
-        # Fetch transcript from Vexa API
-        logger.info(f"[VEXA WEBHOOK] No segments in payload — fetching from Vexa API")
-        transcript_data = get_transcript(meeting_code)
-        if transcript_data:
-            transcript_text = transcript_data.get("transcript", "")
-        else:
-            logger.warning(f"[VEXA WEBHOOK] Could not fetch transcript for {meeting_code}")
-
-    # Check if session already exists for this appointment
-    session_res = await db.execute(
-        select(models.Session).where(
-            models.Session.appointment_id == appointment.id
-        )
-    )
-    existing_session = session_res.scalars().first()
-
-    if existing_session:
-        existing_session.transcript = transcript_text
-        existing_session.version += 1
-        await db.commit()
-        await db.refresh(existing_session)
-        logger.info(f"[VEXA WEBHOOK] Updated session {existing_session.id} for appointment {appointment.id}")
-    else:
-        new_session = models.Session(
-            patient_id=appointment.patient_id,
-            doctor_id=appointment.doctor_id,
-            appointment_id=appointment.id,
-            created_by_id=appointment.doctor_id,
-            session_date=datetime.now(timezone.utc),
-            transcript=transcript_text,
-            summary="",
-            soap_notes=""
-        )
-        db.add(new_session)
-        await db.commit()
-        await db.refresh(new_session)
-        logger.info(f"[VEXA WEBHOOK] Created new session for appointment {appointment.id}")
-
-    return {"status": "ok", "appointment_id": appointment.id, "meeting_code": meeting_code}
-
-
-# -------------------------------------------------------------------
-# Manually fetch transcript from Vexa for an appointment
+# Fetch transcript from Fireflies and save to session
 # POST /sessions/{appointment_id}/fetch-transcript
-# Use this if webhook failed or for testing
+#
+# Call this after the meeting ends.
+# Fireflies takes 3-5 minutes to process after meeting ends.
 # -------------------------------------------------------------------
 
 @router.post("/{appointment_id}/fetch-transcript", response_model=schemas.SessionOut)
@@ -176,6 +80,7 @@ async def fetch_and_save_transcript(
     ])),
     db: AsyncSession = Depends(database.get_db)
 ):
+    # Get appointment to find meet_link
     apt_res = await db.execute(
         select(models.Appointment).where(models.Appointment.id == appointment_id)
     )
@@ -185,19 +90,19 @@ async def fetch_and_save_transcript(
     if not appointment.meet_link:
         raise HTTPException(status_code=400, detail="No meet link found for this appointment")
 
-    meeting_code = extract_meeting_code(appointment.meet_link)
-    if not meeting_code:
-        raise HTTPException(status_code=400, detail="Could not extract meeting code from meet link")
-
-    transcript_data = get_transcript(meeting_code)
-    if not transcript_data:
+    # Fetch transcript from Fireflies
+    fireflies_data = get_transcript(appointment.meet_link)
+    if not fireflies_data:
         raise HTTPException(
             status_code=404,
-            detail="No transcript found on Vexa yet — meeting may still be processing"
+            detail="No transcript found on Fireflies yet — wait 3-5 minutes after meeting ends and try again"
         )
 
-    transcript_text = transcript_data.get("transcript", "")
+    transcript_text = fireflies_data.get("transcript", "")
+    summary_text = fireflies_data.get("summary", "")
+    action_items = fireflies_data.get("action_items", "")
 
+    # Check if session already exists for this appointment
     session_res = await db.execute(
         select(models.Session).where(models.Session.appointment_id == appointment_id)
     )
@@ -205,9 +110,12 @@ async def fetch_and_save_transcript(
 
     if existing_session:
         existing_session.transcript = transcript_text
+        existing_session.summary = summary_text
+        existing_session.soap_notes = action_items
         existing_session.version += 1
         await db.commit()
         await db.refresh(existing_session)
+        logger.info(f"[FIREFLIES] Updated session {existing_session.id} for appointment {appointment_id}")
         return existing_session
     else:
         new_session = models.Session(
@@ -217,12 +125,13 @@ async def fetch_and_save_transcript(
             created_by_id=current_user.id,
             session_date=datetime.now(timezone.utc),
             transcript=transcript_text,
-            summary="",
-            soap_notes=""
+            summary=summary_text,
+            soap_notes=action_items
         )
         db.add(new_session)
         await db.commit()
         await db.refresh(new_session)
+        logger.info(f"[FIREFLIES] Created new session for appointment {appointment_id}")
         return new_session
 
 
@@ -345,6 +254,8 @@ async def update_session(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     update_data = session_update.model_dump(exclude_unset=True)
+    if "soap_notes" in update_data and update_data["soap_notes"] is not None:
+        update_data["soap_notes"] = json.dumps(update_data["soap_notes"])
     for key, value in update_data.items():
         setattr(session, key, value)
     session.version += 1

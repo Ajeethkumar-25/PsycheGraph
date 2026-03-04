@@ -9,7 +9,7 @@ from sqlalchemy import text
 from datetime import datetime, timedelta, timezone
 from ..services.google_calendar import GoogleCalendarService
 from ..services.email import send_meet_link_email
-from ..services.vexa import send_bot_to_meeting as vexa_send_bot
+from ..services.fireflies import send_bot_to_meeting as ff_send_bot
 import asyncio
 import traceback
 import psycopg2
@@ -77,7 +77,7 @@ def generate_meet_link_sync(
     Fully synchronous background function — runs in a thread.
     1. Creates Google Meet link
     2. Saves to DB
-    3. Sends Vexa bot to transcribe
+    3. Sends Fireflies bot to transcribe
     4. Sends email reminders
     """
     print(f"[MEET LINK] Starting for appointment {appointment_id}")
@@ -104,15 +104,15 @@ def generate_meet_link_sync(
     # Step 2: Save meet link to DB
     save_meet_link_sync(appointment_id, meet_link)
 
-    # Step 3: Send Vexa bot to transcribe the meeting
+    # Step 3: Send Fireflies bot to transcribe the meeting
     try:
-        success = vexa_send_bot(meet_link=meet_link, bot_name="PsycheGraph Bot")
+        success = ff_send_bot(meet_link=meet_link, title=summary)
         if success:
-            print(f"[VEXA] Bot sent to meeting for appointment {appointment_id}: {meet_link}")
+            print(f"[FIREFLIES] Bot sent to meeting for appointment {appointment_id}: {meet_link}")
         else:
-            print(f"[VEXA] Bot could not be sent for appointment {appointment_id} (non-fatal)")
+            print(f"[FIREFLIES] Bot could not be sent for appointment {appointment_id} (non-fatal)")
     except Exception as e:
-        print(f"[VEXA] Error sending bot for appointment {appointment_id}: {e}")
+        print(f"[FIREFLIES] Error sending bot for appointment {appointment_id}: {e}")
 
     # Step 4: Send email reminders
     try:
