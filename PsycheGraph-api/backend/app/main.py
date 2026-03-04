@@ -63,10 +63,6 @@ MIGRATIONS = [
         "doctor_ids INTEGER[], "
         "created_at TIMESTAMP WITH TIME ZONE DEFAULT now()"
         ");"),
-    # ── remove assemblyai, add fireflies ──────────────────────────────────
-    ("drop_session_assemblyai_id",  "ALTER TABLE sessions DROP COLUMN IF EXISTS assemblyai_transcript_id;"),
-    ("drop_idx_session_assemblyai", "DROP INDEX IF EXISTS idx_session_assemblyai_id;"),
-    # ─────────────────────────────────────────────────────────────────────
     ("add_rec_doctor_ids",        "ALTER TABLE receptionists ADD COLUMN IF NOT EXISTS doctor_ids INTEGER[];"),
     ("drop_receptionist_doctors", "DROP TABLE IF EXISTS receptionist_doctors;"),
     ("idx_org_email",             "CREATE INDEX IF NOT EXISTS idx_org_email ON organizations(email);"),
@@ -88,12 +84,14 @@ MIGRATIONS = [
     ("idx_session_created_by",    "CREATE INDEX IF NOT EXISTS idx_session_created_by ON sessions(created_by_id);"),
     ("idx_doctor_user_id",        "CREATE INDEX IF NOT EXISTS idx_doctor_user_id ON doctors(user_id);"),
     ("idx_receptionist_user_id",  "CREATE INDEX IF NOT EXISTS idx_receptionist_user_id ON receptionists(user_id);"),
-    ("idx_receptionist_doctor_ids_gin",
-        "CREATE INDEX IF NOT EXISTS idx_receptionist_doctor_ids ON receptionists USING GIN (doctor_ids);"),
+    ("idx_receptionist_doctor_ids_gin","CREATE INDEX IF NOT EXISTS idx_receptionist_doctor_ids ON receptionists USING GIN (doctor_ids);"),
+    ("add_user_phone_number",   "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_number VARCHAR;"),
+    ("add_org_logo_url",        "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS logo_url VARCHAR;"),
 ]
 
 
 async def run_migrations(conn):
+    # Ensure tracking table exists
     await conn.execute(text(
         "CREATE TABLE IF NOT EXISTS migrations_log ("
         "  migration_id VARCHAR PRIMARY KEY,"
@@ -101,6 +99,7 @@ async def run_migrations(conn):
         ");"
     ))
 
+    # Get already-applied migrations
     result = await conn.execute(text("SELECT migration_id FROM migrations_log;"))
     applied = {row[0] for row in result.fetchall()}
 
@@ -114,6 +113,7 @@ async def run_migrations(conn):
 
     succeeded = []
     for migration_id, sql in pending:
+        # Each migration gets its own savepoint so one failure never aborts the rest
         await conn.execute(text(f"SAVEPOINT mig_{migration_id};"))
         try:
             await conn.execute(text(sql))
@@ -124,6 +124,7 @@ async def run_migrations(conn):
             await conn.execute(text(f"ROLLBACK TO SAVEPOINT mig_{migration_id};"))
             logger.warning(f"  ✗ {migration_id} skipped: {e}")
 
+    # Record all succeeded migrations in one bulk insert
     if succeeded:
         placeholders = ", ".join(f"(:id_{i})" for i in range(len(succeeded)))
         params = {f"id_{i}": mid for i, mid in enumerate(succeeded)}
@@ -148,6 +149,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan, title="PsycheGraph API")
 
+
+# ── Request logging middleware ─────────────────────────────────────────────
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -179,6 +182,8 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
+# ── CORS ───────────────────────────────────────────────────────────────────
+
 origins = [
     "http://localhost:5173",
     "http://localhost:8000",
@@ -193,6 +198,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ── Routers ────────────────────────────────────────────────────────────────
 
 app.include_router(auth.router)
 app.include_router(admin.router)

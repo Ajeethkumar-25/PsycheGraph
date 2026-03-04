@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -154,8 +153,6 @@ async def get_role_users(
         if org_id:
             query = query.where(models.User.organization_id == org_id)
     elif current_user.role == models.UserRole.HOSPITAL:
-        query = query.where(models.User.organization_id == current_user.organization_id)
-    elif current_user.role == models.UserRole.RECEPTIONIST:
         query = query.where(models.User.organization_id == current_user.organization_id)
     else:
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -329,7 +326,7 @@ async def create_doctor(
 @doctor_router.get("", response_model=List[schemas.UserOut])
 async def list_doctors(
     skip: int = 0, limit: int = 100,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL, models.UserRole.RECEPTIONIST])),
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
     db: AsyncSession = Depends(database.get_db)
 ):
     return await get_role_users(models.UserRole.DOCTOR, skip, limit, current_user, db)
@@ -337,7 +334,7 @@ async def list_doctors(
 @doctor_router.get("/{user_id}", response_model=schemas.UserOut)
 async def get_doctor(
     user_id: int,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL, models.UserRole.RECEPTIONIST])),
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
     db: AsyncSession = Depends(database.get_db)
 ):
     query = select(models.User).options(
@@ -490,6 +487,46 @@ async def get_receptionist(
     if not user:
         raise HTTPException(status_code=404, detail="Receptionist not found")
     return user
+
+
+@receptionist_router.get("/{user_id}/doctors", response_model=List[schemas.DoctorBasic])
+async def get_receptionist_doctors(
+    user_id: int,
+    current_user: models.User = Depends(dependencies.require_role([
+        models.UserRole.SUPER_ADMIN,
+        models.UserRole.HOSPITAL,
+        models.UserRole.DOCTOR,
+        models.UserRole.RECEPTIONIST
+    ])),
+    db: AsyncSession = Depends(database.get_db)
+):
+    """Get all doctors assigned to a specific receptionist."""
+    # Receptionists can only view their own assigned doctors
+    if current_user.role == models.UserRole.RECEPTIONIST and current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    # Doctors can view any receptionist's assigned doctors within their org
+
+    query = select(models.User).options(
+        selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors)
+    ).where(models.User.id == user_id, models.User.role == models.UserRole.RECEPTIONIST)
+
+    if current_user.role == models.UserRole.HOSPITAL:
+        query = query.where(models.User.organization_id == current_user.organization_id)
+
+    result = await db.execute(query)
+    receptionist = result.scalars().first()
+    if not receptionist:
+        raise HTTPException(status_code=404, detail="Receptionist not found")
+
+    profile = receptionist.receptionist_profile
+    if not profile or not profile.doctors:
+        return []
+
+    doctor_user_ids = [d.user_id for d in profile.doctors]
+    doc_res = await db.execute(
+        select(models.User).where(models.User.id.in_(doctor_user_ids))
+    )
+    return doc_res.scalars().all()
 
 @receptionist_router.put("/{user_id}", response_model=schemas.UserOut)
 async def update_receptionist(

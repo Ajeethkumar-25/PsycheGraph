@@ -35,12 +35,24 @@ class UserCreate(UserBase):
     organization_id: int
 
 
+class DoctorBasic(BaseModel):
+    id: int
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    role: Optional[UserRole] = None
+
+    class Config:
+        from_attributes = True
+
+
 class UserOut(UserBase):
     id: int
     organization_id: Optional[int] = None
     shift_timing: Optional[str] = None
+    phone_number: Optional[str] = None
     doctor_id: Optional[int] = None
     doctor_name: Optional[str] = None
+    assigned_doctors: Optional[List[DoctorBasic]] = None
 
     class Config:
         from_attributes = True
@@ -60,6 +72,7 @@ class HospitalRegister(BaseModel):
     email: EmailStr
     password: str
     full_name: str
+    phone_number: Optional[str] = None
     license_key: str  # Must match the license key issued to the organization
 
 
@@ -101,6 +114,7 @@ class OrganizationOut(OrganizationBase):
     license_key: Optional[str] = None
     is_approved: Optional[bool] = False
     is_active: bool
+    logo_url: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -152,39 +166,17 @@ class SessionBase(BaseModel):
     date: datetime
 
 
-class SOAPNote(BaseModel):
-    subjective: Optional[str] = None    # Patient's symptoms, complaints, history
-    objective: Optional[str] = None     # Doctor's observations, vitals, exam findings
-    assessment: Optional[str] = None    # Diagnosis / clinical impression
-    plan: Optional[str] = None          # Treatment plan, medications, follow-up
-
-
-class SessionCreate(BaseModel):
-    patient_id: int
-    doctor_id: int
-    appointment_id: Optional[int] = None
-    soap_notes: Optional[SOAPNote] = None
+class SessionCreate(SessionBase):
+    pass
 
 
 class SessionOut(SessionBase):
     id: int
-    appointment_id: Optional[int] = None
-    audio_url: Optional[str] = None
-    transcript: Optional[str] = None
-    soap_notes: Optional[SOAPNote] = None
-    summary: Optional[str] = None
+    audio_url: Optional[str]
+    transcript: Optional[str]
+    soap_note: Optional[str]
+    summary: Optional[str]
     version: int
-
-    @field_validator("soap_notes", mode="before")
-    @classmethod
-    def parse_soap_notes(cls, v):
-        if isinstance(v, str):
-            try:
-                import json
-                return json.loads(v)
-            except Exception:
-                return None
-        return v
 
     class Config:
         from_attributes = True
@@ -294,5 +286,5 @@ class AppointmentReschedule(BaseModel):
 
 class SessionUpdate(BaseModel):
     transcript: Optional[str] = None
-    soap_notes: Optional[SOAPNote] = None
+    soap_note: Optional[str] = None
     summary: Optional[str] = None

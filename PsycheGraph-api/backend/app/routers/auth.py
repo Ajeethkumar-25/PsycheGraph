@@ -1,12 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from jose import jwt, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from datetime import timedelta
-from typing import Union
+from typing import Union, Optional
 from .. import models, schemas, auth, database
 from ..models import Receptionist
+import shutil, os, uuid
+
+LOGO_UPLOAD_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "uploads", "logos"
+)
+os.makedirs(LOGO_UPLOAD_DIR, exist_ok=True)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -24,6 +31,7 @@ def build_user_with_token(user: models.User, access_token: str, refresh_token: s
         organization_id=user.organization_id,
         is_active=user.is_active,
         shift_timing=user.shift_timing,
+        phone_number=user.phone_number,
         doctor_id=user.doctor_profile.id if user.role == models.UserRole.DOCTOR and user.doctor_profile else None,
         doctor_name=None,
         access_token=access_token,
@@ -81,7 +89,7 @@ async def login_user(user_credentials: schemas.UserLogin, role: models.UserRole,
 # Change 3: org email must match — hospital sets their own password
 # -------------------------------------------------------------------
 
-async def register_hospital(user_data: schemas.HospitalRegister, db: AsyncSession):
+async def register_hospital(user_data: schemas.HospitalRegister, db: AsyncSession, logo_url: Optional[str] = None):
     # Find org by email AND license_key — both must match
     result = await db.execute(
         select(models.Organization).where(
@@ -106,12 +114,17 @@ async def register_hospital(user_data: schemas.HospitalRegister, db: AsyncSessio
     if existing.scalars().first():
         raise HTTPException(status_code=400, detail="Hospital admin already registered for this organization")
 
+    # Save logo URL to organization if provided
+    if logo_url:
+        org.logo_url = logo_url
+
     new_user = models.User(
         email=user_data.email,
         hashed_password=auth.get_password_hash(user_data.password),
         role=models.UserRole.HOSPITAL,
         organization_id=org.id,
-        full_name=user_data.full_name
+        full_name=user_data.full_name,
+        phone_number=user_data.phone_number,
     )
     db.add(new_user)
     try:
@@ -232,6 +245,57 @@ async def login_receptionist(user_credentials: schemas.UserLogin, db: AsyncSessi
 # Doctor and Receptionist are created by Hospital Admin only
 # -------------------------------------------------------------------
 
-@router.post("/register/hospital", response_model=schemas.RegisterResponse, tags=["Hospital Login"])
-async def register_hospital_admin(user_data: schemas.HospitalRegister, db: AsyncSession = Depends(database.get_db)):
-    return await register_hospital(user_data, db)
+@router.post(
+    "/register/hospital",
+    response_model=schemas.RegisterResponse,
+    tags=["Hospital Login"],
+    openapi_extra={
+        "requestBody": {
+            "content": {
+                "multipart/form-data": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "email":        {"type": "string", "format": "email"},
+                            "password":     {"type": "string"},
+                            "full_name":    {"type": "string"},
+                            "license_key":  {"type": "string"},
+                            "phone_number": {"type": "string"},
+                            "logo":         {"type": "string", "format": "binary"},
+                        },
+                        "required": ["email", "password", "full_name", "license_key"]
+                    }
+                }
+            }
+        }
+    }
+)
+async def register_hospital_admin(
+    email: str = Form(...),
+    password: str = Form(...),
+    full_name: str = Form(...),
+    license_key: str = Form(...),
+    phone_number: Optional[str] = Form(None),
+    logo: Optional[UploadFile] = File(None),
+    db: AsyncSession = Depends(database.get_db)
+):
+    # Handle logo upload
+    logo_url = None
+    if logo and logo.filename:
+        ext = os.path.splitext(logo.filename)[1].lower()
+        if ext not in [".jpg", ".jpeg", ".png", ".webp", ".svg"]:
+            raise HTTPException(status_code=400, detail="Logo must be JPG, PNG, WEBP or SVG")
+        filename = f"{uuid.uuid4()}{ext}"
+        file_path = os.path.join(LOGO_UPLOAD_DIR, filename)
+        with open(file_path, "wb") as f:
+            shutil.copyfileobj(logo.file, f)
+        logo_url = f"/uploads/logos/{filename}"
+
+    user_data = schemas.HospitalRegister(
+        email=email,
+        password=password,
+        full_name=full_name,
+        license_key=license_key,
+        phone_number=phone_number,
+    )
+    return await register_hospital(user_data, db, logo_url=logo_url)

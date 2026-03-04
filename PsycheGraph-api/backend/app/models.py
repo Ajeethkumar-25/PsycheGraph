@@ -41,6 +41,7 @@ class Organization(Base):
     license_key = Column(String, unique=True, nullable=False, index=True)
     is_approved = Column(Boolean, default=False, nullable=False, index=True)
     is_active   = Column(Boolean, default=True,  nullable=False, index=True)
+    logo_url    = Column(String, nullable=True)
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
@@ -64,9 +65,9 @@ class User(Base):
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
     is_active       = Column(Boolean, default=True, nullable=False)
 
-    # Shared profile field
-    full_name = Column(String, nullable=True)
-
+    # Shared profile fields
+    full_name    = Column(String, nullable=True)
+    phone_number = Column(String, nullable=True)
 
     # Receptionist-specific fields
     shift_timing = Column(String, nullable=True)

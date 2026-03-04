@@ -80,7 +80,6 @@ async def fetch_and_save_transcript(
     ])),
     db: AsyncSession = Depends(database.get_db)
 ):
-    # Get appointment to find meet_link
     apt_res = await db.execute(
         select(models.Appointment).where(models.Appointment.id == appointment_id)
     )
@@ -90,7 +89,6 @@ async def fetch_and_save_transcript(
     if not appointment.meet_link:
         raise HTTPException(status_code=400, detail="No meet link found for this appointment")
 
-    # Fetch transcript from Fireflies
     fireflies_data = get_transcript(appointment.meet_link)
     if not fireflies_data:
         raise HTTPException(
@@ -100,18 +98,18 @@ async def fetch_and_save_transcript(
 
     transcript_text = fireflies_data.get("transcript", "")
     summary_text = fireflies_data.get("summary", "")
-    action_items = fireflies_data.get("action_items", "")
+    # Note: action_items from Fireflies are NOT saved to soap_notes
+    # soap_notes is exclusively for doctor to fill manually
 
-    # Check if session already exists for this appointment
     session_res = await db.execute(
         select(models.Session).where(models.Session.appointment_id == appointment_id)
     )
     existing_session = session_res.scalars().first()
 
     if existing_session:
+        # Only update transcript and summary — never overwrite doctor's soap_notes
         existing_session.transcript = transcript_text
         existing_session.summary = summary_text
-        existing_session.soap_notes = action_items
         existing_session.version += 1
         await db.commit()
         await db.refresh(existing_session)
@@ -126,7 +124,6 @@ async def fetch_and_save_transcript(
             session_date=datetime.now(timezone.utc),
             transcript=transcript_text,
             summary=summary_text,
-            soap_notes=action_items
         )
         db.add(new_session)
         await db.commit()
@@ -217,7 +214,7 @@ async def get_session(
 
 
 # -------------------------------------------------------------------
-# Update session
+# Update session — doctor fills soap_notes manually here
 # -------------------------------------------------------------------
 
 @router.put("/{session_id}", response_model=schemas.SessionOut)
