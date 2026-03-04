@@ -50,8 +50,8 @@ def send_bot_to_meeting(meet_link: str, bot_name: str = "PsycheGraph Bot") -> bo
         return False
 
     try:
-        from vexa import VexaAPI
-        client = VexaAPI(token=VEXA_API_KEY)
+        from vexa_client import VexaClient
+        client = VexaClient(api_key=VEXA_API_KEY)
         client.request_bot(
             platform="google_meet",
             native_meeting_id=meeting_code,
@@ -75,8 +75,8 @@ def set_webhook_url(webhook_url: str) -> bool:
         return False
 
     try:
-        from vexa import VexaAPI
-        client = VexaAPI(token=VEXA_API_KEY)
+        from vexa_client import VexaClient
+        client = VexaClient(api_key=VEXA_API_KEY)
         client.set_webhook_url(webhook_url)
         logger.info(f"[VEXA] Webhook registered: {webhook_url}")
         return True
@@ -95,8 +95,8 @@ def get_transcript(meeting_code: str) -> dict | None:
         return None
 
     try:
-        from vexa import VexaAPI
-        client = VexaAPI(token=VEXA_API_KEY)
+        from vexa_client import VexaClient
+        client = VexaClient(api_key=VEXA_API_KEY)
         transcript = client.get_transcript(
             platform="google_meet",
             native_meeting_id=meeting_code
