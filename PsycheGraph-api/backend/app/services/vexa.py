@@ -29,7 +29,6 @@ def extract_meeting_code(meet_link: str) -> str | None:
         return None
     parts = meet_link.rstrip("/").split("/")
     code = parts[-1]
-    # Basic validation: should look like xxx-xxxx-xxx
     if len(code) > 5 and "-" in code:
         return code
     return None
@@ -37,7 +36,7 @@ def extract_meeting_code(meet_link: str) -> str | None:
 
 def send_bot_to_meeting(meet_link: str, bot_name: str = "PsycheGraph Bot") -> bool:
     """
-    Sends Vexa bot to a Google Meet using vexa-client.
+    Sends Vexa bot to a Google Meet using direct HTTP call.
     Returns True if successful, False otherwise.
     """
     if not VEXA_API_KEY:
@@ -50,13 +49,17 @@ def send_bot_to_meeting(meet_link: str, bot_name: str = "PsycheGraph Bot") -> bo
         return False
 
     try:
-        from vexa_client import VexaClient
-        client = VexaClient(api_key=VEXA_API_KEY)
-        client.request_bot(
-            platform="google_meet",
-            native_meeting_id=meeting_code,
-            bot_name=bot_name
+        response = requests.post(
+            f"{VEXA_BASE_URL}/bots",
+            headers=_headers(),
+            json={
+                "platform": "google_meet",
+                "native_meeting_id": meeting_code,
+                "bot_name": bot_name
+            },
+            timeout=30
         )
+        response.raise_for_status()
         logger.info(f"[VEXA] Bot sent to meeting: {meeting_code}")
         return True
 
@@ -67,19 +70,25 @@ def send_bot_to_meeting(meet_link: str, bot_name: str = "PsycheGraph Bot") -> bo
 
 def set_webhook_url(webhook_url: str) -> bool:
     """
-    Registers the webhook URL with Vexa using the vexa-client library.
-    Call this once after deployment.
+    Registers the webhook URL with Vexa.
+    Vexa will POST to this URL when a meeting ends.
+    Correct endpoint: PUT /users/me/config
     """
     if not VEXA_API_KEY:
         logger.error("[VEXA] VEXA_API_KEY not set in .env")
         return False
 
     try:
-        from vexa_client import VexaClient
-        client = VexaClient(api_key=VEXA_API_KEY)
-        client.set_webhook_url(webhook_url)
+        response = requests.put(
+            f"{VEXA_BASE_URL}/users/me/config",
+            headers=_headers(),
+            json={"webhook_url": webhook_url},
+            timeout=30
+        )
+        response.raise_for_status()
         logger.info(f"[VEXA] Webhook registered: {webhook_url}")
         return True
+
     except Exception as e:
         logger.error(f"[VEXA] Error registering webhook: {e}")
         return False
@@ -87,31 +96,31 @@ def set_webhook_url(webhook_url: str) -> bool:
 
 def get_transcript(meeting_code: str) -> dict | None:
     """
-    Fetches full transcript from Vexa after meeting ends using vexa-client.
-    Returns dict with transcript text and segments, or None if failed.
+    Fetches full transcript from Vexa after meeting ends.
+    Returns dict with transcript text, or None if failed.
     """
     if not VEXA_API_KEY:
         logger.error("[VEXA] VEXA_API_KEY not set in .env")
         return None
 
     try:
-        from vexa_client import VexaClient
-        client = VexaClient(api_key=VEXA_API_KEY)
-        transcript = client.get_transcript(
-            platform="google_meet",
-            native_meeting_id=meeting_code
+        response = requests.get(
+            f"{VEXA_BASE_URL}/transcripts/google_meet/{meeting_code}",
+            headers=_headers(),
+            timeout=30
         )
+        response.raise_for_status()
+        data = response.json()
 
-        if not transcript:
-            logger.warning(f"[VEXA] No transcript found for {meeting_code}")
+        segments = data if isinstance(data, list) else data.get("segments", [])
+        if not segments:
+            logger.warning(f"[VEXA] No segments in transcript for {meeting_code}")
             return None
 
-        # transcript is a list of {speaker, text} dicts
-        segments = transcript if isinstance(transcript, list) else []
         lines = []
         for seg in segments:
             speaker = seg.get("speaker") or seg.get("speaker_name") or "Unknown"
-            text = (seg.get("text") or "").strip()
+            text = (seg.get("text") or seg.get("content") or "").strip()
             if text:
                 lines.append(f"[{speaker}]: {text}")
 
