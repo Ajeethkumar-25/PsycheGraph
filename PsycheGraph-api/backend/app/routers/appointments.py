@@ -15,7 +15,10 @@ import traceback
 import psycopg2
 import os
 import threading
+import logging
 from concurrent.futures import ThreadPoolExecutor
+
+logger = logging.getLogger("appointments")
 
 executor = ThreadPoolExecutor()
 
@@ -28,9 +31,9 @@ def get_calendar_service():
     if _calendar_service is None:
         try:
             _calendar_service = GoogleCalendarService()
-            print("[GOOGLE] Calendar service initialized successfully")
+            logger.info("[GOOGLE] Calendar service initialized successfully")
         except Exception as e:
-            print(f"[WARNING] Google Calendar not available: {e}")
+            logger.warning(f"Google Calendar not available: {e}")
             return None
     return _calendar_service
 
@@ -42,21 +45,21 @@ def save_meet_link_sync(appointment_id: int, meet_link: str):
     """Pure sync function to save meet link — runs in a thread, no event loop needed."""
     try:
         conn = psycopg2.connect(
-            host="localhost",
-            port=5432,
-            database="psychedb",
-            user="psycheuser",
-            password="password"
+            host=os.getenv("DB_HOST", "localhost"),
+            port=int(os.getenv("DB_PORT", 5432)),
+            database=os.getenv("DB_NAME", "psychedb"),
+            user=os.getenv("DB_USER", "psycheuser"),
+            password=os.getenv("DB_PASSWORD", "password")
         )
         cur = conn.cursor()
         cur.execute("UPDATE appointments SET meet_link = %s WHERE id = %s", (meet_link, appointment_id))
         conn.commit()
         cur.close()
         conn.close()
-        print(f"[MEET LINK] Saved for appointment {appointment_id}: {meet_link}")
+        logger.info(f"[MEET LINK] Saved for appointment {appointment_id}: {meet_link}")
     except Exception as e:
-        print(f"[MEET LINK] Failed to save for appointment {appointment_id}: {e}")
-        print(traceback.format_exc())
+        logger.error(f"[MEET LINK] Failed to save for appointment {appointment_id}: {e}")
+        logger.error(traceback.format_exc())
 
 
 def generate_meet_link_sync(
@@ -94,11 +97,11 @@ def generate_meet_link_sync(
                 attendee_email=None
             )
     except Exception as e:
-        print(f"[MEET LINK] Failed to create event for appointment {appointment_id}: {e}")
-        print(traceback.format_exc())
+        logger.error(f"[MEET LINK] Failed to save for appointment {appointment_id}: {e}")
+        logger.error(traceback.format_exc())
 
     if not meet_link:
-        print(f"[MEET LINK] No link generated for appointment {appointment_id}")
+        logger.error(f"[MEET LINK] No link generated for appointment {appointment_id}")
         return
 
     # Step 2: Save meet link to DB
@@ -108,11 +111,11 @@ def generate_meet_link_sync(
     try:
         success = ff_send_bot(meet_link=meet_link, title=summary)
         if success:
-            print(f"[FIREFLIES] Bot sent to meeting for appointment {appointment_id}: {meet_link}")
+            logger.info(f"[FIREFLIES] Bot sent to meeting for appointment {appointment_id}: {meet_link}")
         else:
-            print(f"[FIREFLIES] Bot could not be sent for appointment {appointment_id} (non-fatal)")
+            logger.error(f"[FIREFLIES] Bot could not be sent for appointment {appointment_id} (non-fatal)")
     except Exception as e:
-        print(f"[FIREFLIES] Error sending bot for appointment {appointment_id}: {e}")
+        logger.error(f"[FIREFLIES] Error sending bot for appointment {appointment_id}: {e}")
 
     # Step 4: Send email reminders
     try:
@@ -144,7 +147,7 @@ def generate_meet_link_sync(
                 meet_link=meet_link
             )
     except Exception as e:
-        print(f"[MEET EMAIL] Failed for appointment {appointment_id}: {e}")
+        logger.error(f"[MEET EMAIL] Failed for appointment {appointment_id}: {e}")
 
 
 # -------------------------------------------------------------------
@@ -271,7 +274,12 @@ async def create_availability(
         created_by_id=current_user.id
     )
     db.add(new_slot)
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"create_availability commit failed for doctor_id={target_doctor_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create availability slot.")
 
     res = await db.execute(
         select(models.Availability)
@@ -350,7 +358,12 @@ async def batch_create_availability(
     if not slots:
         raise HTTPException(status_code=400, detail="No slots generated — check start/end time and duration")
 
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"batch_create_availability commit failed for doctor_id={target_doctor_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create availability slots.")
 
     result = await db.execute(
         select(models.Availability)
@@ -445,7 +458,12 @@ async def book_appointment(
 
     slot.is_booked = True
     db.add(new_app)
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"book_appointment commit failed for slot {booking.availability_id}: {e}")
+        raise HTTPException(status_code=500, detail="Booking failed. Please try again.")
 
     doctor_email = doctor_user.email if (doctor_user and doctor_user.role == models.UserRole.DOCTOR) else None
 
@@ -463,7 +481,7 @@ async def book_appointment(
             appointment_date=slot.start_time.strftime("%Y-%m-%d"),
             start_time_str=slot.start_time.strftime("%H:%M"),
             end_time_str=slot.end_time.strftime("%H:%M"),
-            appointment_start_utc=slot.start_time.replace(tzinfo=timezone.utc),
+            appointment_start_utc=slot.start_time.replace(tzinfo=IST).astimezone(timezone.utc),
         ),
         daemon=True
     )
@@ -515,8 +533,12 @@ async def delete_availability_slot(
             print(f"NOTIFICATION: Appointment {appointment.id} cancelled.")
 
     await db.delete(slot)
-    await db.commit()
-    return None
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"delete_availability_slot commit failed for slot {slot_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete availability slot.")
 
 
 @router.get("", response_model=List[schemas.AppointmentOut])
@@ -582,9 +604,13 @@ async def reschedule_appointment(
     appointment.status = models.AppointmentStatus.RESCHEDULED
     new_slot.is_booked = True
 
-    await db.commit()
-    await db.refresh(appointment)
-    return appointment
+    try:
+        await db.commit()
+        await db.refresh(appointment)
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"reschedule_appointment commit failed for appointment_id={appointment_id}: {e}")
+        raise HTTPException(status_code=500, detail="Reschedule failed. Please try again.")
 
 
 @router.get("/updated", response_model=List[schemas.AppointmentOut])
