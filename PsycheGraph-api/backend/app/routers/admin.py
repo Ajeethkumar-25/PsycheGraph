@@ -7,9 +7,9 @@ from sqlalchemy.orm import selectinload
 from ..services.email import send_license_key_email
 from concurrent.futures import ThreadPoolExecutor
 import shutil, os, uuid
-import logging                                          # ADDED
+import logging                                          
 
-logger = logging.getLogger("admin")                    # ADDED
+logger = logging.getLogger("admin")                    
 
 LOGO_UPLOAD_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -650,7 +650,7 @@ async def create_receptionist(
 @receptionist_router.get("", response_model=List[schemas.ReceptionistOut])
 async def list_receptionists(
     skip: int = 0, limit: int = 100,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL, models.UserRole.RECEPTIONIST])),
     db: AsyncSession = Depends(database.get_db)
 ):
     return await get_role_users(models.UserRole.RECEPTIONIST, skip, limit, current_user, db)
@@ -658,7 +658,7 @@ async def list_receptionists(
 @receptionist_router.get("/{user_id}", response_model=schemas.ReceptionistOut)
 async def get_receptionist(
     user_id: int,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL, models.UserRole.RECEPTIONIST])),
     db: AsyncSession = Depends(database.get_db)
 ):
     query = select(models.User).options(
