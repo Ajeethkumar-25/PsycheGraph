@@ -175,7 +175,7 @@ async def get_role_users(
     if current_user.role == models.UserRole.SUPER_ADMIN:
         if org_id:
             query = query.where(models.User.organization_id == org_id)
-    elif current_user.role == models.UserRole.HOSPITAL:
+    elif current_user.role in [models.UserRole.HOSPITAL, models.UserRole.RECEPTIONIST]:
         query = query.where(models.User.organization_id == current_user.organization_id)
     else:
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -439,7 +439,7 @@ async def update_hospital_profile(
 
 doctor_router = APIRouter(prefix="/admin/doctors", tags=["Doctor Login"])
 
-@doctor_router.post("", response_model=schemas.UserOut)
+@doctor_router.post("", response_model=schemas.DoctorOut)
 async def create_doctor(
     user: schemas.DoctorRegister,
     current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
@@ -493,18 +493,18 @@ async def create_doctor(
     await db.commit()
     return await fetch_user_with_profiles(new_user.id, db)
 
-@doctor_router.get("", response_model=List[schemas.UserOut])
+@doctor_router.get("", response_model=List[schemas.DoctorOut])
 async def list_doctors(
     skip: int = 0, limit: int = 100,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL, models.UserRole.RECEPTIONIST])),
     db: AsyncSession = Depends(database.get_db)
 ):
     return await get_role_users(models.UserRole.DOCTOR, skip, limit, current_user, db)
 
-@doctor_router.get("/{user_id}", response_model=schemas.UserOut)
+@doctor_router.get("/{user_id}", response_model=schemas.DoctorOut)
 async def get_doctor(
     user_id: int,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL, models.UserRole.RECEPTIONIST])),
     db: AsyncSession = Depends(database.get_db)
 ):
     query = select(models.User).options(
@@ -519,7 +519,7 @@ async def get_doctor(
         raise HTTPException(status_code=404, detail="Doctor not found")
     return user
 
-@doctor_router.put("/{user_id}", response_model=schemas.UserOut)
+@doctor_router.put("/{user_id}", response_model=schemas.DoctorOut)
 async def update_doctor(
     user_id: int,
     user_update: schemas.UserUpdate,
@@ -586,7 +586,7 @@ async def delete_doctor(
 
 receptionist_router = APIRouter(prefix="/admin/receptionists", tags=["Receptionist Login"])
 
-@receptionist_router.post("", response_model=schemas.UserOut)
+@receptionist_router.post("", response_model=schemas.ReceptionistOut)
 async def create_receptionist(
     user: schemas.ReceptionistRegister,
     current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
@@ -647,7 +647,7 @@ async def create_receptionist(
     await db.commit()
     return await fetch_user_with_profiles(new_user.id, db)
 
-@receptionist_router.get("", response_model=List[schemas.UserOut])
+@receptionist_router.get("", response_model=List[schemas.ReceptionistOut])
 async def list_receptionists(
     skip: int = 0, limit: int = 100,
     current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
@@ -655,7 +655,7 @@ async def list_receptionists(
 ):
     return await get_role_users(models.UserRole.RECEPTIONIST, skip, limit, current_user, db)
 
-@receptionist_router.get("/{user_id}", response_model=schemas.UserOut)
+@receptionist_router.get("/{user_id}", response_model=schemas.ReceptionistOut)
 async def get_receptionist(
     user_id: int,
     current_user: models.User = Depends(dependencies.require_role([models.UserRole.SUPER_ADMIN, models.UserRole.HOSPITAL])),
@@ -673,7 +673,7 @@ async def get_receptionist(
         raise HTTPException(status_code=404, detail="Receptionist not found")
     return user
 
-@receptionist_router.put("/{user_id}", response_model=schemas.UserOut)
+@receptionist_router.put("/{user_id}", response_model=schemas.ReceptionistOut)
 async def update_receptionist(
     user_id: int,
     user_update: schemas.UserUpdate,
