@@ -14,16 +14,7 @@ SMTP_USER = os.getenv("SMTP_USER") or "bavithrapackiri@gmail.com"
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD") or "rbzeczytotrivtwi"
 FROM_EMAIL = os.getenv("FROM_EMAIL") or "bavithrapackiri@gmail.com"
 
-# FIX: Use logger instead of print() for config values.
-# print() on module import runs at server startup for every worker process,
-# and exposes credentials in stdout logs. Use DEBUG level so they only
-# appear when explicitly enabled.
 logger = logging.getLogger("email-service")
-logger.debug(f"[EMAIL CONFIG] SMTP_HOST={SMTP_HOST}")
-logger.debug(f"[EMAIL CONFIG] SMTP_PORT={SMTP_PORT}")
-logger.debug(f"[EMAIL CONFIG] SMTP_USER={SMTP_USER}")
-logger.debug(f"[EMAIL CONFIG] SMTP_PASSWORD={'SET' if SMTP_PASSWORD else 'NOT SET'}")
-logger.debug(f"[EMAIL CONFIG] FROM_EMAIL={FROM_EMAIL}")
 
 
 def _send(to_email: str, subject: str, body: str):
@@ -50,9 +41,8 @@ def _send(to_email: str, subject: str, body: str):
 
 def send_license_key_email(to_email: str, org_name: str, license_key: str):
     """Sent to organization email when org is registered."""
-    subject = f"PsycheGraph — Your License Key for {org_name}"
-    body = f"""
-Dear {org_name} Team,
+    subject = f"PsycheGraph - Your License Key for {org_name}"
+    body = f"""Dear {org_name} Team,
 
 Your organization has been approved on PsycheGraph!
 
@@ -80,24 +70,19 @@ def send_appointment_email(
     end_time: str,
     meet_link: str
 ):
-    """
-    Booking confirmation — sent when appointment is created.
-    Meet link is NOT included here; it will be sent separately 30 minutes before.
-    """
-    subject = "PsycheGraph — Appointment Confirmation"
-    body = f"""
-Dear {patient_name},
+    subject = "PsycheGraph - Appointment Confirmation"
+    body = f"""Dear {patient_name},
 
 Your appointment has been successfully booked on PsycheGraph!
 
 Appointment Details:
-─────────────────────────────
+-----------------------------
 Doctor Name   : Dr. {doctor_name}
 Booked By     : {role}
 Date          : {appointment_date}
 Start Time    : {start_time}
 End Time      : {end_time}
-─────────────────────────────
+-----------------------------
 
 You will receive the Google Meet link 30 minutes before your appointment.
 
@@ -116,23 +101,18 @@ def send_meet_link_email(
     end_time: str,
     meet_link: str
 ):
-    """
-    Meet link reminder — sent to BOTH patient and doctor
-    exactly 30 minutes before the appointment starts.
-    """
-    subject = "PsycheGraph — Your Appointment Starts in 30 Minutes"
-    body = f"""
-Dear {recipient_name},
+    subject = "PsycheGraph - Your Appointment Starts in 30 Minutes"
+    body = f"""Dear {recipient_name},
 
 Your appointment with Dr. {doctor_name} is starting in 30 minutes!
 
 Appointment Details:
-─────────────────────────────
+-----------------------------
 Doctor Name   : Dr. {doctor_name}
 Date          : {appointment_date}
 Start Time    : {start_time}
 End Time      : {end_time}
-─────────────────────────────
+-----------------------------
 
 Join your Google Meet session here:
 {meet_link}
