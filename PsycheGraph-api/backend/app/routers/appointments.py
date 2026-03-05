@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from ..services.google_calendar import GoogleCalendarService
 from ..services.email import send_meet_link_email
 from ..services.fireflies import send_bot_to_meeting as ff_send_bot
+from apscheduler.schedulers.background import BackgroundScheduler
 import asyncio
 import traceback
 import psycopg2
@@ -17,6 +18,9 @@ import os
 import threading
 import logging
 from concurrent.futures import ThreadPoolExecutor
+
+scheduler = BackgroundScheduler()
+scheduler.start()
 
 logger = logging.getLogger("appointments")
 
@@ -118,36 +122,45 @@ def generate_meet_link_sync(
         logger.error(f"[FIREFLIES] Error sending bot for appointment {appointment_id}: {e}")
 
     # Step 4: Send email reminders
-    try:
-        send_at = appointment_start_utc - timedelta(minutes=30)
-        now = datetime.now(timezone.utc)
-        delay_seconds = (send_at - now).total_seconds()
-        if delay_seconds > 0:
-            import time
-            time.sleep(delay_seconds)
+    def send_emails():
+        try:
+            if patient_email:
+                send_meet_link_email(
+                    to_email=patient_email,
+                    recipient_name=patient_name,
+                    doctor_name=doctor_name,
+                    appointment_date=appointment_date,
+                    start_time=start_time_str,
+                    end_time=end_time_str,
+                    meet_link=meet_link
+                )
+            if doctor_email:
+                send_meet_link_email(
+                    to_email=doctor_email,
+                    recipient_name=f"Dr. {doctor_name}",
+                    doctor_name=doctor_name,
+                    appointment_date=appointment_date,
+                    start_time=start_time_str,
+                    end_time=end_time_str,
+                    meet_link=meet_link
+                )
+        except Exception as e:
+            logger.error(f"[MEET EMAIL] Failed for appointment {appointment_id}: {e}")
 
-        if patient_email:
-            send_meet_link_email(
-                to_email=patient_email,
-                recipient_name=patient_name,
-                doctor_name=doctor_name,
-                appointment_date=appointment_date,
-                start_time=start_time_str,
-                end_time=end_time_str,
-                meet_link=meet_link
-            )
-        if doctor_email:
-            send_meet_link_email(
-                to_email=doctor_email,
-                recipient_name=f"Dr. {doctor_name}",
-                doctor_name=doctor_name,
-                appointment_date=appointment_date,
-                start_time=start_time_str,
-                end_time=end_time_str,
-                meet_link=meet_link
-            )
-    except Exception as e:
-        logger.error(f"[MEET EMAIL] Failed for appointment {appointment_id}: {e}")
+    send_at = appointment_start_utc - timedelta(minutes=30)
+    now = datetime.now(timezone.utc)
+
+    if send_at <= now:
+        send_emails()
+    else:
+        scheduler.add_job(
+            func=send_emails,
+            trigger='date',
+            run_date=send_at,
+            id=f"email_appointment_{appointment_id}",
+            replace_existing=True
+        )
+        logger.info(f"[MEET EMAIL] Scheduled for appointment {appointment_id} at {send_at} UTC")
 
 
 # -------------------------------------------------------------------
