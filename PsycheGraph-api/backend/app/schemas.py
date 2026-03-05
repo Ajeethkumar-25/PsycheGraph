@@ -166,17 +166,39 @@ class SessionBase(BaseModel):
     date: datetime
 
 
-class SessionCreate(SessionBase):
-    pass
+class SOAPNote(BaseModel):
+    subjective:  Optional[str] = None    # Patient's symptoms, complaints, history
+    objective:   Optional[str] = None    # Doctor's observations, vitals, exam findings
+    assessment:  Optional[str] = None    # Diagnosis / clinical impression
+    plan:        Optional[str] = None    # Treatment plan, medications, follow-up
+
+
+class SessionCreate(BaseModel):
+    patient_id:     int
+    doctor_id:      int
+    appointment_id: Optional[int] = None
+    soap_notes:     Optional[SOAPNote] = None
 
 
 class SessionOut(SessionBase):
     id: int
-    audio_url: Optional[str]
-    transcript: Optional[str]
-    soap_note: Optional[str]
-    summary: Optional[str]
-    version: int
+    appointment_id: Optional[int] = None
+    audio_url:      Optional[str] = None
+    transcript:     Optional[str] = None
+    soap_notes:     Optional[SOAPNote] = None
+    summary:        Optional[str] = None
+    version:        int
+
+    @field_validator("soap_notes", mode="before")
+    @classmethod
+    def parse_soap_notes(cls, v):
+        if isinstance(v, str):
+            try:
+                import json
+                return json.loads(v)
+            except Exception:
+                return None
+        return v
 
     class Config:
         from_attributes = True
@@ -288,3 +310,80 @@ class SessionUpdate(BaseModel):
     transcript: Optional[str] = None
     soap_note: Optional[str] = None
     summary: Optional[str] = None
+
+class DaySchedule(BaseModel):
+    is_enabled:  bool = True
+    start_time:  Optional[str] = None
+    end_time:    Optional[str] = None
+    break_start: Optional[str] = None
+    break_end:   Optional[str] = None
+
+    @field_validator("start_time", "end_time", "break_start", "break_end", mode="before")
+    @classmethod
+    def validate_time_format(cls, v):
+        if v is None:
+            return v
+        if isinstance(v, str):
+            import re
+            if not re.match(r"^\d{2}:\d{2}$", v):
+                raise ValueError("Time must be in HH:MM format e.g. 09:00")
+        return v
+
+    class Config:
+        from_attributes = True
+        json_schema_extra = {
+            "example": {
+                "is_enabled": True,
+                "start_time": "09:00",
+                "end_time": "17:00",
+                "break_start": "12:00",
+                "break_end": "13:00"
+            }
+        }
+
+
+class WorkingHoursUpdate(BaseModel):
+    monday:    Optional[DaySchedule] = None
+    tuesday:   Optional[DaySchedule] = None
+    wednesday: Optional[DaySchedule] = None
+    thursday:  Optional[DaySchedule] = None
+    friday:    Optional[DaySchedule] = None
+    saturday:  Optional[DaySchedule] = None
+    sunday:    Optional[DaySchedule] = None
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "monday":    {"is_enabled": True,  "start_time": "09:00", "end_time": "17:00", "break_start": "12:00", "break_end": "13:00"},
+                "tuesday":   {"is_enabled": True,  "start_time": "09:00", "end_time": "17:00", "break_start": "12:00", "break_end": "13:00"},
+                "wednesday": {"is_enabled": True,  "start_time": "09:00", "end_time": "17:00", "break_start": "12:00", "break_end": "13:00"},
+                "thursday":  {"is_enabled": True,  "start_time": "09:00", "end_time": "17:00", "break_start": "12:00", "break_end": "13:00"},
+                "friday":    {"is_enabled": True,  "start_time": "09:00", "end_time": "16:00", "break_start": "12:00", "break_end": "13:00"},
+                "saturday":  {"is_enabled": True,  "start_time": "10:00", "end_time": "14:00", "break_start": None,    "break_end": None},
+                "sunday":    {"is_enabled": False, "start_time": None,    "end_time": None,    "break_start": None,    "break_end": None}
+            }
+        }
+
+
+class ScheduleOut(BaseModel):
+    id:          int
+    day:         str
+    is_enabled:  bool
+    start_time:  Optional[str] = None
+    end_time:    Optional[str] = None
+    break_start: Optional[str] = None
+    break_end:   Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class HospitalProfileOut(BaseModel):
+    org_name:     str
+    email:        str
+    logo_url:     Optional[str] = None
+    address:      Optional[str] = None
+    full_name:    Optional[str] = None
+    phone_number: Optional[str] = None
+
+    class Config:
+        from_attributes = True

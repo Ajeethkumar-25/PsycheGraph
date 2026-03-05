@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List, Optional
@@ -6,6 +6,13 @@ from .. import models, schemas, auth, dependencies, database
 from sqlalchemy.orm import selectinload
 from ..services.email import send_license_key_email
 from concurrent.futures import ThreadPoolExecutor
+import shutil, os, uuid
+
+LOGO_UPLOAD_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "uploads", "logos"
+)
+os.makedirs(LOGO_UPLOAD_DIR, exist_ok=True)
 
 executor = ThreadPoolExecutor()
 
@@ -212,6 +219,7 @@ async def validate_doctor_user_ids(doctor_user_ids: List[int], org_id: int, db: 
 # -------------------------------------------------------------------
 
 hospital_router = APIRouter(prefix="/admin/hospitals", tags=["Hospital Login"])
+hospital_profile_router = APIRouter(prefix="/admin/hospital", tags=["Hospital Profile"])
 
 @hospital_router.get("", response_model=List[schemas.UserOut])
 async def list_hospitals(
@@ -263,6 +271,126 @@ async def delete_hospital(
     await db.delete(user)
     await db.commit()
     return None
+
+
+
+@hospital_profile_router.get("/profile", response_model=schemas.HospitalProfileOut)
+async def get_hospital_profile(
+    org_id: Optional[int] = None,
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.HOSPITAL, models.UserRole.SUPER_ADMIN])),
+    db: AsyncSession = Depends(database.get_db)
+):
+    """GET hospital profile — org name, logo, address, email + admin full_name, phone_number."""
+    if current_user.role == models.UserRole.SUPER_ADMIN:
+        if not org_id:
+            raise HTTPException(status_code=400, detail="Super Admin must provide org_id as query parameter")
+        target_org_id = org_id
+    else:
+        target_org_id = current_user.organization_id
+
+    org_res = await db.execute(
+        select(models.Organization).where(models.Organization.id == target_org_id)
+    )
+    org = org_res.scalars().first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    # For hospital role: use current_user directly
+    # For super admin: fetch the hospital admin user of that org
+    if current_user.role == models.UserRole.SUPER_ADMIN:
+        hospital_user_res = await db.execute(
+            select(models.User).where(
+                models.User.organization_id == target_org_id,
+                models.User.role == models.UserRole.HOSPITAL
+            )
+        )
+        hospital_user = hospital_user_res.scalars().first()
+        full_name    = hospital_user.full_name    if hospital_user else None
+        phone_number = hospital_user.phone_number if hospital_user else None
+    else:
+        full_name    = current_user.full_name
+        phone_number = current_user.phone_number
+
+    return schemas.HospitalProfileOut(
+        org_name=org.name,
+        email=org.email,
+        logo_url=org.logo_url,
+        address=org.address,
+        full_name=full_name,
+        phone_number=phone_number,
+    )
+
+
+@hospital_profile_router.put(
+    "/profile",
+    response_model=schemas.HospitalProfileOut,
+    openapi_extra={
+        "requestBody": {
+            "content": {
+                "multipart/form-data": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "phone_number": {"type": "string"},
+                            "address":      {"type": "string"},
+                            "logo":         {"type": "string", "format": "binary"},
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
+async def update_hospital_profile(
+    org_id:       Optional[int] = None,
+    phone_number: Optional[str] = Form(None),
+    address:      Optional[str] = Form(None),
+    logo:         Optional[UploadFile] = File(None),
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.HOSPITAL, models.UserRole.SUPER_ADMIN])),
+    db: AsyncSession = Depends(database.get_db)
+):
+    """PUT hospital profile — phone_number (users table), address + logo_url (organizations table)."""
+    if current_user.role == models.UserRole.SUPER_ADMIN:
+        if not org_id:
+            raise HTTPException(status_code=400, detail="Super Admin must provide org_id as query parameter")
+        target_org_id = org_id
+    else:
+        target_org_id = current_user.organization_id
+
+    org_res = await db.execute(
+        select(models.Organization).where(models.Organization.id == target_org_id)
+    )
+    org = org_res.scalars().first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    if phone_number is not None:
+        current_user.phone_number = phone_number
+
+    if address is not None:
+        org.address = address
+
+    if logo and logo.filename:
+        ext = os.path.splitext(logo.filename)[1].lower()
+        if ext not in [".jpg", ".jpeg", ".png", ".webp", ".svg"]:
+            raise HTTPException(status_code=400, detail="Logo must be JPG, PNG, WEBP or SVG")
+        filename = f"{uuid.uuid4()}{ext}"
+        with open(os.path.join(LOGO_UPLOAD_DIR, filename), "wb") as f:
+            shutil.copyfileobj(logo.file, f)
+        org.logo_url = f"/uploads/logos/{filename}"
+
+    await db.commit()
+    await db.refresh(org)
+    await db.refresh(current_user)
+
+    return schemas.HospitalProfileOut(
+        org_name=org.name,
+        email=org.email,
+        logo_url=org.logo_url,
+        address=org.address,
+        full_name=current_user.full_name,
+        phone_number=current_user.phone_number,
+    )
 
 
 # -------------------------------------------------------------------
@@ -487,46 +615,6 @@ async def get_receptionist(
     if not user:
         raise HTTPException(status_code=404, detail="Receptionist not found")
     return user
-
-
-@receptionist_router.get("/{user_id}/doctors", response_model=List[schemas.DoctorBasic])
-async def get_receptionist_doctors(
-    user_id: int,
-    current_user: models.User = Depends(dependencies.require_role([
-        models.UserRole.SUPER_ADMIN,
-        models.UserRole.HOSPITAL,
-        models.UserRole.DOCTOR,
-        models.UserRole.RECEPTIONIST
-    ])),
-    db: AsyncSession = Depends(database.get_db)
-):
-    """Get all doctors assigned to a specific receptionist."""
-    # Receptionists can only view their own assigned doctors
-    if current_user.role == models.UserRole.RECEPTIONIST and current_user.id != user_id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    # Doctors can view any receptionist's assigned doctors within their org
-
-    query = select(models.User).options(
-        selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors)
-    ).where(models.User.id == user_id, models.User.role == models.UserRole.RECEPTIONIST)
-
-    if current_user.role == models.UserRole.HOSPITAL:
-        query = query.where(models.User.organization_id == current_user.organization_id)
-
-    result = await db.execute(query)
-    receptionist = result.scalars().first()
-    if not receptionist:
-        raise HTTPException(status_code=404, detail="Receptionist not found")
-
-    profile = receptionist.receptionist_profile
-    if not profile or not profile.doctors:
-        return []
-
-    doctor_user_ids = [d.user_id for d in profile.doctors]
-    doc_res = await db.execute(
-        select(models.User).where(models.User.id.in_(doctor_user_ids))
-    )
-    return doc_res.scalars().all()
 
 @receptionist_router.put("/{user_id}", response_model=schemas.UserOut)
 async def update_receptionist(

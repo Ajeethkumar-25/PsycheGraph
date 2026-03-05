@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from sqlalchemy import text
 
 from .database import engine, Base
-from .routers import auth, admin, patients, sessions, appointments, stats
+from .routers import auth, admin, patients, sessions, appointments, stats, working_hours
 
 # Load .env from the backend directory explicitly
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -84,9 +84,24 @@ MIGRATIONS = [
     ("idx_session_created_by",    "CREATE INDEX IF NOT EXISTS idx_session_created_by ON sessions(created_by_id);"),
     ("idx_doctor_user_id",        "CREATE INDEX IF NOT EXISTS idx_doctor_user_id ON doctors(user_id);"),
     ("idx_receptionist_user_id",  "CREATE INDEX IF NOT EXISTS idx_receptionist_user_id ON receptionists(user_id);"),
-    ("idx_receptionist_doctor_ids_gin","CREATE INDEX IF NOT EXISTS idx_receptionist_doctor_ids ON receptionists USING GIN (doctor_ids);"),
+    ("idx_receptionist_doctor_ids_gin",
+        "CREATE INDEX IF NOT EXISTS idx_receptionist_doctor_ids ON receptionists USING GIN (doctor_ids);"),
     ("add_user_phone_number",   "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_number VARCHAR;"),
     ("add_org_logo_url",        "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS logo_url VARCHAR;"),
+    ("add_org_address",         "ALTER TABLE organizations ADD COLUMN IF NOT EXISTS address VARCHAR;"),
+    ("create_org_schedules_table",
+        "CREATE TABLE IF NOT EXISTS organization_schedules ("
+        "id SERIAL PRIMARY KEY, "
+        "organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, "
+        "day VARCHAR NOT NULL, "
+        "is_enabled BOOLEAN NOT NULL DEFAULT TRUE, "
+        "start_time VARCHAR, "
+        "end_time VARCHAR, "
+        "break_start VARCHAR, "
+        "break_end VARCHAR"
+        ");"),
+    ("idx_org_schedules_org_id", "CREATE INDEX IF NOT EXISTS idx_org_schedules_org_id ON organization_schedules(organization_id);"),
+    ("uq_org_schedule_day",      "CREATE UNIQUE INDEX IF NOT EXISTS uq_org_schedule_day ON organization_schedules(organization_id, day);"),
 ]
 
 
@@ -204,12 +219,14 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(admin.hospital_router)
+app.include_router(admin.hospital_profile_router)
 app.include_router(admin.doctor_router)
 app.include_router(admin.receptionist_router)
 app.include_router(patients.router)
 app.include_router(sessions.router)
 app.include_router(appointments.router)
 app.include_router(stats.router)
+app.include_router(working_hours.router)
 
 
 @app.get("/")
