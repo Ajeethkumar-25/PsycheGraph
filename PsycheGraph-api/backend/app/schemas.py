@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, field_validator, model_validator
 from typing import Optional, List
 from datetime import datetime, date
 from .models import UserRole
@@ -38,8 +38,7 @@ class UserCreate(UserBase):
 class DoctorBasic(BaseModel):
     id: int
     full_name: Optional[str] = None
-    email: Optional[str] = None
-    role: Optional[UserRole] = None
+
 
     class Config:
         from_attributes = True
@@ -50,9 +49,23 @@ class UserOut(UserBase):
     organization_id: Optional[int] = None
     shift_timing: Optional[str] = None
     phone_number: Optional[str] = None
-    doctor_id: Optional[int] = None
-    doctor_name: Optional[str] = None
     assigned_doctors: Optional[List[DoctorBasic]] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_assigned_doctors(cls, data):
+        # data is the raw SQLAlchemy User object
+        if hasattr(data, "receptionist_profile") and data.receptionist_profile:
+            doctors = data.receptionist_profile.doctors
+            if doctors:
+                data.__dict__["assigned_doctors"] = [
+                    {
+                        "id": d.id,
+                        "full_name": d.full_name
+                    }
+                    for d in doctors
+                ]
+        return data
 
     class Config:
         from_attributes = True
@@ -183,8 +196,6 @@ class SessionCreate(BaseModel):
 class SessionOut(SessionBase):
     id: int
     appointment_id: Optional[int] = None
-    audio_url:      Optional[str] = None
-    transcript:     Optional[str] = None
     soap_notes:     Optional[SOAPNote] = None
     summary:        Optional[str] = None
     version:        int

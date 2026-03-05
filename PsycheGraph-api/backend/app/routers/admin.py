@@ -7,6 +7,9 @@ from sqlalchemy.orm import selectinload
 from ..services.email import send_license_key_email
 from concurrent.futures import ThreadPoolExecutor
 import shutil, os, uuid
+import logging                                          # ADDED
+
+logger = logging.getLogger("admin")                    # ADDED
 
 LOGO_UPLOAD_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -54,7 +57,8 @@ async def register_organization(
         await db.refresh(new_org)
     except Exception as e:
         await db.rollback()
-        raise HTTPException(status_code=400, detail=f"Registration failed: {str(e)}")
+        logger.error(f"register_organization commit failed for org '{org.name}': {e}")   # ADDED
+        raise HTTPException(status_code=500, detail="Registration failed. Please try again.")  # FIXED: was leaking str(e)
 
     # Send license key to hospital email (not super admin)
     if new_org.email != current_user.email:
@@ -117,8 +121,14 @@ async def update_organization(
     for key, value in update_data.items():
         setattr(org, key, value)
 
-    await db.commit()
-    await db.refresh(org)
+    # ADDED: was a bare commit with no error handling
+    try:
+        await db.commit()
+        await db.refresh(org)
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"update_organization commit failed for org_id={org_id}: {e}")
+        raise HTTPException(status_code=500, detail="Update failed. Please try again.")
     return org
 
 
@@ -135,7 +145,13 @@ async def delete_organization(
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
     await db.delete(org)
-    await db.commit()
+    # ADDED: was a bare commit with no error handling
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"delete_organization commit failed for org_id={org_id}: {e}")
+        raise HTTPException(status_code=500, detail="Delete failed. Please try again.")
     return None
 
 
@@ -153,7 +169,7 @@ async def get_role_users(
 ):
     query = select(models.User).options(
         selectinload(models.User.doctor_profile),
-        selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors)
+        selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors).selectinload(models.Doctor.user)
     ).where(models.User.role == role)
 
     if current_user.role == models.UserRole.SUPER_ADMIN:
@@ -175,7 +191,7 @@ async def fetch_user_with_profiles(user_id: int, db: AsyncSession) -> models.Use
         select(models.User)
         .options(
             selectinload(models.User.doctor_profile),
-            selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors)
+            selectinload(models.User.receptionist_profile).selectinload(models.Receptionist.doctors).selectinload(models.Doctor.user)
         )
         .where(models.User.id == user_id)
     )
@@ -256,7 +272,14 @@ async def update_hospital(
         update_data["hashed_password"] = auth.get_password_hash(update_data.pop("password"))
     for key, value in update_data.items():
         setattr(user, key, value)
-    await db.commit()
+
+    # ADDED: was a bare commit with no error handling
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"update_hospital commit failed for user_id={user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Update failed. Please try again.")
     return await fetch_user_with_profiles(user_id, db)
 
 @hospital_router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -269,7 +292,13 @@ async def delete_hospital(
     if not user or user.role != models.UserRole.HOSPITAL:
         raise HTTPException(status_code=404, detail="Hospital Admin not found")
     await db.delete(user)
-    await db.commit()
+    # ADDED: was a bare commit with no error handling
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"delete_hospital commit failed for user_id={user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Delete failed. Please try again.")
     return None
 
 
@@ -375,13 +404,24 @@ async def update_hospital_profile(
         if ext not in [".jpg", ".jpeg", ".png", ".webp", ".svg"]:
             raise HTTPException(status_code=400, detail="Logo must be JPG, PNG, WEBP or SVG")
         filename = f"{uuid.uuid4()}{ext}"
-        with open(os.path.join(LOGO_UPLOAD_DIR, filename), "wb") as f:
-            shutil.copyfileobj(logo.file, f)
+        # ADDED: was bare open() with no error handling — OS errors would crash with raw traceback
+        try:
+            with open(os.path.join(LOGO_UPLOAD_DIR, filename), "wb") as f:
+                shutil.copyfileobj(logo.file, f)
+        except OSError as e:
+            logger.error(f"Logo file save failed for org_id={target_org_id}: {e}")
+            raise HTTPException(status_code=500, detail="Logo upload failed. Please try again.")
         org.logo_url = f"/uploads/logos/{filename}"
 
-    await db.commit()
-    await db.refresh(org)
-    await db.refresh(current_user)
+    # ADDED: was a bare commit with no error handling
+    try:
+        await db.commit()
+        await db.refresh(org)
+        await db.refresh(current_user)
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"update_hospital_profile commit failed for org_id={target_org_id}: {e}")
+        raise HTTPException(status_code=500, detail="Profile update failed. Please try again.")
 
     return schemas.HospitalProfileOut(
         org_name=org.name,
@@ -433,7 +473,8 @@ async def create_doctor(
         await db.flush()
     except Exception as e:
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
+        logger.error(f"create_doctor user flush failed for email='{user.email}': {e}")  # ADDED
+        raise HTTPException(status_code=500, detail="Doctor creation failed. Please try again.")  # FIXED: was leaking str(e)
 
     # 2. Create Doctor profile row
     new_doctor = models.Doctor(
@@ -446,7 +487,8 @@ async def create_doctor(
         await db.flush()
     except Exception as e:
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"Doctor profile creation failed: {str(e)}")
+        logger.error(f"create_doctor profile flush failed for user_id={new_user.id}: {e}")  # ADDED
+        raise HTTPException(status_code=500, detail="Doctor profile creation failed. Please try again.")  # FIXED: was leaking str(e)
 
     await db.commit()
     return await fetch_user_with_profiles(new_user.id, db)
@@ -501,7 +543,14 @@ async def update_doctor(
     update_data.pop("doctor_ids", None)
     for key, value in update_data.items():
         setattr(user, key, value)
-    await db.commit()
+
+    # ADDED: was a bare commit with no error handling
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"update_doctor commit failed for user_id={user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Update failed. Please try again.")
     return await fetch_user_with_profiles(user_id, db)
 
 @doctor_router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -521,7 +570,13 @@ async def delete_doctor(
     if not user:
         raise HTTPException(status_code=404, detail="Doctor not found")
     await db.delete(user)
-    await db.commit()
+    # ADDED: was a bare commit with no error handling
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"delete_doctor commit failed for user_id={user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Delete failed. Please try again.")
     return None
 
 
@@ -571,7 +626,8 @@ async def create_receptionist(
         await db.flush()
     except Exception as e:
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
+        logger.error(f"create_receptionist user flush failed for email='{user.email}': {e}")  # ADDED
+        raise HTTPException(status_code=500, detail="Receptionist creation failed. Please try again.")  # FIXED: was leaking str(e)
 
     # 2. Create Receptionist profile row — doctor_ids stored here for relationship resolution
     new_receptionist = models.Receptionist(
@@ -585,7 +641,8 @@ async def create_receptionist(
         await db.flush()
     except Exception as e:
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"Receptionist profile creation failed: {str(e)}")
+        logger.error(f"create_receptionist profile flush failed for user_id={new_user.id}: {e}")  # ADDED
+        raise HTTPException(status_code=500, detail="Receptionist profile creation failed. Please try again.")  # FIXED: was leaking str(e)
 
     await db.commit()
     return await fetch_user_with_profiles(new_user.id, db)
@@ -655,7 +712,14 @@ async def update_receptionist(
 
     for key, value in update_data.items():
         setattr(user, key, value)
-    await db.commit()
+
+    # ADDED: was a bare commit with no error handling
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"update_receptionist commit failed for user_id={user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Update failed. Please try again.")
     return await fetch_user_with_profiles(user_id, db)
 
 @receptionist_router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -675,5 +739,11 @@ async def delete_receptionist(
     if not user:
         raise HTTPException(status_code=404, detail="Receptionist not found")
     await db.delete(user)
-    await db.commit()
+    # ADDED: was a bare commit with no error handling
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"delete_receptionist commit failed for user_id={user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Delete failed. Please try again.")
     return None
