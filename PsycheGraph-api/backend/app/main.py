@@ -183,7 +183,7 @@ async def log_requests(request: Request, call_next):
         logger.error(traceback.format_exc())
         return JSONResponse(
             status_code=500,
-            content={"message": "Internal Server Error", "details": str(exc)},
+            content={"message": "Internal Server Error"},
         )
 
 

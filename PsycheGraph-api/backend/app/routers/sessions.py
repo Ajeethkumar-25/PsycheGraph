@@ -168,7 +168,7 @@ async def get_sessions(
     except Exception as e:
         logger.error(f"Error in get_sessions: {str(e)}")
         logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve sessions. Please try again.")
 
 
 # -------------------------------------------------------------------

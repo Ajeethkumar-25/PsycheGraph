@@ -47,22 +47,27 @@ class DoctorBasic(BaseModel):
 class UserOut(UserBase):
     id: int
     organization_id: Optional[int] = None
-    shift_timing: Optional[str] = None
     phone_number: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class DoctorOut(UserOut):
+    pass
+
+
+class ReceptionistOut(UserOut):
+    shift_timing: Optional[str] = None
     assigned_doctors: Optional[List[DoctorBasic]] = None
 
     @model_validator(mode="before")
     @classmethod
     def populate_assigned_doctors(cls, data):
-        # data is the raw SQLAlchemy User object
         if hasattr(data, "receptionist_profile") and data.receptionist_profile:
             doctors = data.receptionist_profile.doctors
             if doctors:
                 data.__dict__["assigned_doctors"] = [
-                    {
-                        "id": d.id,
-                        "full_name": d.full_name
-                    }
+                    {"id": d.id, "full_name": d.full_name}
                     for d in doctors
                 ]
         return data

@@ -46,9 +46,14 @@ async def create_patient(
         created_by_id=current_user.id
     )
     db.add(new_patient)
-    await db.commit()
-    await db.refresh(new_patient)
-    return new_patient
+    try:
+        await db.commit()
+        await db.refresh(new_patient)
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"create_patient commit failed: {e}")
+        raise HTTPException(status_code=500, detail="Patient creation failed. Please try again.")
+    return new_patientt
 
 @router.get("", response_model=List[schemas.PatientOut])
 async def get_patients(
