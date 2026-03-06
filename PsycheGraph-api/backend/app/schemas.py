@@ -169,6 +169,7 @@ class PatientOut(PatientBase):
     id: int
     organization_id: Optional[int]
     doctor_id: Optional[int]
+    age: Optional[int] = None
     created_at: datetime
 
     class Config:

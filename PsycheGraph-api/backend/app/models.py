@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime, timezone
-import enum
+import enum 
 from .database import Base
 
 
@@ -250,6 +250,14 @@ class Patient(Base):
     @contact_number.setter
     def contact_number(self, value):
         self.phone = value
+
+    @property
+    def age(self):
+        if not self.date_of_birth:
+            return None
+        today = datetime.now().date()
+        dob = self.date_of_birth.date() if isinstance(self.date_of_birth, datetime) else self.date_of_birth
+        return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
 
 # -------------------------------------------------------------------
