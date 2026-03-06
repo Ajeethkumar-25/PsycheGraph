@@ -204,6 +204,7 @@ class SessionOut(SessionBase):
     appointment_id: Optional[int] = None
     soap_notes:     Optional[SOAPNote] = None
     summary:        Optional[str] = None
+    transcript:     Optional[str] = None
     version:        int
 
     @field_validator("soap_notes", mode="before")
@@ -325,7 +326,7 @@ class AppointmentReschedule(BaseModel):
 
 class SessionUpdate(BaseModel):
     transcript: Optional[str] = None
-    soap_note: Optional[str] = None
+    soap_notes: Optional[SOAPNote] = None
     summary: Optional[str] = None
 
 class DaySchedule(BaseModel):
