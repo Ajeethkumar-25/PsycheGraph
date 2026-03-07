@@ -91,7 +91,7 @@ class HospitalRegister(BaseModel):
     password: str
     full_name: str
     phone_number: Optional[str] = None
-    license_key: str  # Must match the license key issued to the organization
+    license_key: str  
 
 
 class DoctorRegister(BaseModel):
@@ -162,7 +162,7 @@ class PatientBase(BaseModel):
 
 class PatientCreate(PatientBase):
     organization_id: Optional[int] = None
-    doctor_id: Optional[int] = None
+    
 
 
 class PatientOut(PatientBase):

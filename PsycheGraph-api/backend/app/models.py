@@ -216,7 +216,7 @@ class Patient(Base):
 
     id              = Column(Integer, primary_key=True, index=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
-    doctor_id       = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    doctor_id       = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     full_name       = Column(String, nullable=False, index=True)
     date_of_birth   = Column(DateTime, nullable=True)
     gender          = Column(String, nullable=True)

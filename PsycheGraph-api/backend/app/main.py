@@ -102,6 +102,7 @@ MIGRATIONS = [
         ");"),
     ("idx_org_schedules_org_id", "CREATE INDEX IF NOT EXISTS idx_org_schedules_org_id ON organization_schedules(organization_id);"),
     ("uq_org_schedule_day",      "CREATE UNIQUE INDEX IF NOT EXISTS uq_org_schedule_day ON organization_schedules(organization_id, day);"),
+    ("make_patient_doctor_id_nullable", "ALTER TABLE patients ALTER COLUMN doctor_id DROP NOT NULL;"),
 ]
 
 

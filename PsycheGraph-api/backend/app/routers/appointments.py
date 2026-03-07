@@ -468,7 +468,8 @@ async def book_appointment(
         booked_by_role=current_user.role.value,
         created_by_id=current_user.id
     )
-
+    
+    patient.doctor_id = slot.doctor_id
     slot.is_booked = True
     db.add(new_app)
     try:
