@@ -463,12 +463,12 @@ async def book_appointment(
         meet_link=None,
         status="SCHEDULED",
         patient_name=patient.full_name,
-        patient_age=booking.patient_age,
+        patient_age=patient.age,
         doctor_name=slot.doctor.full_name if slot.doctor else None,
         booked_by_role=current_user.role.value,
         created_by_id=current_user.id
     )
-    
+
     patient.doctor_id = slot.doctor_id
     slot.is_booked = True
     db.add(new_app)

@@ -295,7 +295,7 @@ class AppointmentBase(BaseModel):
 
 class AppointmentCreate(AppointmentBase):
     availability_id: int
-    patient_age: Optional[int] = None
+    
 
 
 class AppointmentOut(AppointmentBase):
