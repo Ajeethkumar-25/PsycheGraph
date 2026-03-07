@@ -35,6 +35,15 @@ const AppointmentService = {
     createAppointment: async (appointmentData) => {
         const response = await api.post('/appointments/book', appointmentData);
         return response.data;
+    },
+
+    rescheduleAppointment: async (appointmentId, data) => {
+        const response = await api.post(`/appointments/${appointmentId}/reschedule`, data);
+        return response.data;
+    },
+    fetchUpdatedAppointments: async () => {
+        const response = await api.get('/appointments/updated');
+        return response.data;
     }
 };
 

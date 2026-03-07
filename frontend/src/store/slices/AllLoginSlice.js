@@ -2,11 +2,23 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import AllLoginService from '../../services/AllLoginService';
 import TokenService from '../../token/TokenService';
 
+const formatError = (error) => {
+    const detail = error.response?.data?.detail;
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+        return detail.map(err => `${err.loc.join('.')}: ${err.msg}`).join(', ');
+    }
+    if (typeof detail === 'object' && detail !== null) {
+        return detail.msg || JSON.stringify(detail);
+    }
+    return error.response?.data?.message || error.message || 'An unexpected error occurred';
+};
+
 export const login = createAsyncThunk('auth/login', async (credentials, { rejectWithValue }) => {
     try {
         return await AllLoginService.login(credentials);
     } catch (error) {
-        return rejectWithValue(error.response?.data?.detail || 'Login failed');
+        return rejectWithValue(formatError(error));
     }
 });
 
@@ -14,7 +26,7 @@ export const loginHospital = createAsyncThunk('auth/loginHospital', async (crede
     try {
         return await AllLoginService.loginHospital(credentials);
     } catch (error) {
-        return rejectWithValue(error.response?.data?.detail || 'Hospital login failed');
+        return rejectWithValue(formatError(error));
     }
 });
 
@@ -22,7 +34,7 @@ export const loginDoctor = createAsyncThunk('auth/loginDoctor', async (credentia
     try {
         return await AllLoginService.loginDoctor(credentials);
     } catch (error) {
-        return rejectWithValue(error.response?.data?.detail || 'Doctor login failed');
+        return rejectWithValue(formatError(error));
     }
 });
 
@@ -30,7 +42,7 @@ export const loginReceptionist = createAsyncThunk('auth/loginReceptionist', asyn
     try {
         return await AllLoginService.loginReceptionist(credentials);
     } catch (error) {
-        return rejectWithValue(error.response?.data?.detail || 'Receptionist login failed');
+        return rejectWithValue(formatError(error));
     }
 });
 
@@ -38,7 +50,7 @@ export const register = createAsyncThunk('auth/register', async (userData, { rej
     try {
         return await AllLoginService.register(userData);
     } catch (error) {
-        return rejectWithValue(error.response?.data?.detail || 'Registration failed');
+        return rejectWithValue(formatError(error));
     }
 });
 
@@ -46,7 +58,7 @@ export const registerHospital = createAsyncThunk('auth/registerHospital', async 
     try {
         return await AllLoginService.registerHospital(userData);
     } catch (error) {
-        return rejectWithValue(error.response?.data?.detail || 'Hospital registration failed');
+        return rejectWithValue(formatError(error));
     }
 });
 
@@ -54,7 +66,7 @@ export const registerDoctor = createAsyncThunk('auth/registerDoctor', async (use
     try {
         return await AllLoginService.registerDoctor(userData);
     } catch (error) {
-        return rejectWithValue(error.response?.data?.detail || 'Doctor registration failed');
+        return rejectWithValue(formatError(error));
     }
 });
 
@@ -62,7 +74,24 @@ export const registerReceptionist = createAsyncThunk('auth/registerReceptionist'
     try {
         return await AllLoginService.registerReceptionist(userData);
     } catch (error) {
-        return rejectWithValue(error.response?.data?.detail || 'Receptionist registration failed');
+        return rejectWithValue(formatError(error));
+    }
+});
+
+export const fetchUserProfile = createAsyncThunk('auth/fetchProfile', async (_, { getState, rejectWithValue }) => {
+    try {
+        const { auth } = getState();
+        const user = auth.user;
+        if (!user || !user.id) throw new Error("No user ID found");
+
+        const userRole = (user.role || user.user?.role)?.toUpperCase();
+
+        // Dynamic import to avoid circular dependency if any
+        const AllUserService = (await import('../../services/AllUserService')).default;
+        const profileData = await AllUserService.fetchUserById(user.id);
+        return profileData;
+    } catch (error) {
+        return rejectWithValue(formatError(error));
     }
 });
 
@@ -93,13 +122,24 @@ const AllLoginSlice = createSlice({
     },
     extraReducers: (builder) => {
         const handleAuthFullfilled = (state, action) => {
+            const { access_token, refresh_token, token_type, ...userDetails } = action.payload;
+            const userRole = (userDetails.role || userDetails.user?.role)?.toUpperCase();
+            const portal = action.meta.arg?.portal;
+
+            // Block Super Admin from common portal
+            if (portal !== 'admin' && userRole === 'SUPER_ADMIN') {
+                state.loading = false;
+                state.error = "Access Denied: Super Admins must use the Clinical Operations Portal.";
+                state.token = null;
+                state.user = null;
+                TokenService.removeUser();
+                return;
+            }
+
             state.loading = false;
             state.token = action.payload.access_token;
             state.refreshToken = action.payload.refresh_token;
             state.successMessage = "Login successful!";
-
-            // Backend returns user details along with tokens in UserWithToken
-            const { access_token, refresh_token, token_type, ...userDetails } = action.payload;
             state.user = userDetails;
 
             TokenService.setUser(userDetails);
@@ -121,6 +161,17 @@ const AllLoginSlice = createSlice({
             .addCase(login.pending, (state) => { state.loading = true; state.error = null; })
             .addCase(login.fulfilled, handleAuthFullfilled)
             .addCase(login.rejected, (state, action) => { state.loading = false; state.error = action.payload; })
+
+            .addCase(fetchUserProfile.pending, (state) => { state.loading = true; state.error = null; })
+            .addCase(fetchUserProfile.fulfilled, (state, action) => {
+                state.loading = false;
+                state.user = { ...state.user, ...action.payload };
+                TokenService.setUser(state.user);
+            })
+            .addCase(fetchUserProfile.rejected, (state, action) => {
+                state.loading = false;
+                state.error = action.payload;
+            })
 
             .addCase(loginHospital.pending, (state) => { state.loading = true; state.error = null; })
             .addCase(loginHospital.fulfilled, handleAuthFullfilled)

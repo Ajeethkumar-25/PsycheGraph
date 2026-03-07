@@ -1,7 +1,9 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
-import { logout, clearSuccessMessage } from '../store/slices/AllLoginSlice';
+import { logout, clearSuccessMessage, fetchUserProfile } from '../store/slices/AllLoginSlice';
+import { fetchHospitalProfile } from '../store/slices/OrgSlice';
+import { fetchAppointments } from '../store/slices/AppointmentSlice';
 import {
     LayoutDashboard,
     Users,
@@ -12,12 +14,24 @@ import {
     Settings,
     Calendar,
     Search,
-    Bell,
     ChevronRight,
     Sparkles,
     CheckCircle2,
     Menu,
-    X
+    X,
+    Video,
+    FileText,
+    ClipboardList,
+    HeartPulse,
+    LineChart,
+    Trash,
+    Bell,
+    Shield,
+    Clock,
+    Activity,
+    Palette,
+    FileSignature,
+    ChevronLeft
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -27,55 +41,79 @@ function cn(...inputs) {
     return twMerge(clsx(inputs));
 }
 
+// Convert raw base64 string or URL to a displayable src
+function resolveLogoSrc(raw) {
+    if (!raw || typeof raw !== 'string') return null;
+
+    let str = raw.trim();
+    // Strip Python bytes-literal wrapper: b'...' or b"..."
+    if (str.startsWith("b'") && str.endsWith("'")) str = str.slice(2, -1);
+    if (str.startsWith('b"') && str.endsWith('"')) str = str.slice(2, -1);
+
+    // Web URIs or Data URIs
+    if (str.startsWith('data:') || str.startsWith('http://') || str.startsWith('https://')) {
+        // Force direct backend IP calls to go through local proxy to avoid CORS/access issues
+        if (str.includes('65.1.249.160')) {
+            return str.replace(/https?:\/\/65\.1\.249\.160/, '/api');
+        }
+        return str;
+    }
+
+    // Relative paths from backend (e.g., /media/..., media/...)
+    if (str.startsWith('/') || str.startsWith('media/') || /\.(png|jpe?g|gif|svg|webp|ico)(\?.*)?$/i.test(str)) {
+        let path = str.startsWith('/') ? str : `/${str}`;
+
+        // Handle case where backend already returned /api/...
+        if (path.startsWith('/api/')) return path;
+
+        const baseUrl = import.meta.env.VITE_API_BASE_URL && import.meta.env.VITE_API_BASE_URL !== '/api'
+            ? import.meta.env.VITE_API_BASE_URL.replace(/\/api$/, '')
+            : '/api'; // Use proxy in dev or relative base in prod
+
+        return `${baseUrl}${path}`;
+    }
+
+    // Must be a raw base64 string — detect MIME from magic bytes
+    try {
+        const header = str.substring(0, 12);
+        let mime = 'image/png'; // default
+        if (header.startsWith('/9j/')) mime = 'image/jpeg';
+        else if (header.startsWith('iVBOR')) mime = 'image/png';
+        else if (header.startsWith('PHN2') || header.startsWith('PD94')) mime = 'image/svg+xml';
+        else if (header.startsWith('R0lG')) mime = 'image/gif';
+        else if (header.startsWith('UklG')) mime = 'image/webp';
+        else if (header.startsWith('AAAB')) mime = 'image/x-icon';
+        return `data:${mime};base64,${str}`;
+    } catch {
+        return null;
+    }
+}
+
 export default function Layout() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
     const location = useLocation();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const profileRef = useRef(null);
+    const sidebarProfileRef = useRef(null);
 
     const { user, successMessage } = useSelector((state) => state.auth);
+    const { currentOrg } = useSelector((state) => state.organizations || {});
+    const notifications = useSelector(state => state.settings?.notifications || {
+        appointmentReminders: false,
+        pendingNotes: false,
+        patientUpdates: false
+    });
+    const { list: appointments } = useSelector((state) => state.appointments || { list: [] });
+    const [activeReminders, setActiveReminders] = useState([]);
+    const notifiedRef = useRef(new Set());
 
-    useEffect(() => {
-        function handleClickOutside(event) {
-            if (profileRef.current && !profileRef.current.contains(event.target)) {
-                setIsProfileOpen(false);
-            }
-        }
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
-        };
-    }, [profileRef]);
+    // Check if ANY notification is turned on
+    const hasAnyNotificationEnabled = Object.values(notifications).some(val => val === true);
 
-    useEffect(() => {
-        if (successMessage) {
-            const timer = setTimeout(() => {
-                dispatch(clearSuccessMessage());
-            }, 5000);
-            return () => clearTimeout(timer);
-        }
-    }, [successMessage, dispatch]);
-
-    const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 1024);
-
-    useEffect(() => {
-        const handleResize = () => {
-            const isLg = window.innerWidth >= 1024;
-            setIsDesktop(isLg);
-            if (isLg) setIsSidebarOpen(false); // Close mobile sidebar when resizing to desktop
-        };
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
-
-    const handleLogout = () => {
-        dispatch(logout());
-        navigate('/admin');
-    };
-
-    let navItems = [];
+    const userRole = (user?.role || user?.user?.role)?.toUpperCase();
 
     const getRoleConfig = (role) => {
         switch (role) {
@@ -97,9 +135,9 @@ export default function Layout() {
             case 'RECEPTIONIST':
                 return {
                     label: 'Receptionist',
-                    color: 'from-orange-500 to-amber-500',
-                    bg: 'bg-orange-50',
-                    text: 'text-orange-600'
+                    color: 'from-indigo-500 to-indigo-600',
+                    bg: 'bg-indigo-50',
+                    text: 'text-indigo-600'
                 };
             default:
                 return {
@@ -111,8 +149,120 @@ export default function Layout() {
         }
     };
 
-    const userRole = (user?.role || user?.user?.role)?.toUpperCase();
     const roleConfig = getRoleConfig(userRole);
+
+    useEffect(() => {
+        // Skip profile fetch for doctors — login already provides full data
+        if (user?.id && userRole !== 'DOCTOR') {
+            dispatch(fetchUserProfile());
+        }
+    }, [user?.id, userRole, dispatch]);
+
+    useEffect(() => {
+        function handleClickOutside(event) {
+            if (profileRef.current && !profileRef.current.contains(event.target)) {
+                setIsProfileOpen(false);
+            }
+            if (sidebarProfileRef.current && !sidebarProfileRef.current.contains(event.target)) {
+                setIsProfileOpen(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, [profileRef, sidebarProfileRef]);
+
+    useEffect(() => {
+        if (successMessage) {
+            const timer = setTimeout(() => {
+                dispatch(clearSuccessMessage());
+            }, 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [successMessage, dispatch]);
+
+    // 1. Fetch appointments periodically
+    useEffect(() => {
+        if (userRole !== 'DOCTOR' || !notifications.appointmentReminders) return;
+
+        dispatch(fetchAppointments());
+        const fetchInterval = setInterval(() => dispatch(fetchAppointments()), 60000); // Every minute
+
+        return () => clearInterval(fetchInterval);
+    }, [userRole, notifications.appointmentReminders, dispatch]);
+
+    // 2. Check for upcoming appointments whenever data changes
+    useEffect(() => {
+        if (userRole !== 'DOCTOR' || !notifications.appointmentReminders || !appointments.length) return;
+
+        const checkReminders = () => {
+            const now = new Date();
+            const upcoming = appointments.filter(app => {
+                const doctorId = user?.id || user?.user?.id;
+                if (!doctorId || String(app.doctor_id) !== String(doctorId)) return false;
+                if (app.status !== 'SCHEDULED') return false;
+
+                const appTime = new Date(app.start_time);
+                const diffMs = appTime - now;
+                const diffMin = diffMs / (1000 * 60);
+
+                // If within 15 minutes and not in the past
+                return diffMin > 0 && diffMin <= 15 && !notifiedRef.current.has(app.id);
+            });
+
+            if (upcoming.length > 0) {
+                upcoming.forEach(app => {
+                    notifiedRef.current.add(app.id);
+                    const reminder = {
+                        id: `reminder-${app.id}`,
+                        title: 'Upcoming Appointment',
+                        message: `Appointment with ${app.patient_name || 'Patient'} in 15 minutes.`,
+                        time: new Date(app.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    };
+                    setActiveReminders(prev => [...prev, reminder]);
+
+                    setTimeout(() => {
+                        setActiveReminders(prev => prev.filter(r => r.id !== reminder.id));
+                    }, 10000);
+                });
+            }
+        };
+
+        const checkInterval = setInterval(checkReminders, 30000); // logic check every 30s
+        checkReminders(); // Initial check
+
+        return () => clearInterval(checkInterval);
+    }, [appointments, userRole, notifications.appointmentReminders, user?.id]);
+
+    const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 1024);
+
+    useEffect(() => {
+        const handleResize = () => {
+            const isLg = window.innerWidth >= 1024;
+            setIsDesktop(isLg);
+            if (isLg) setIsSidebarOpen(false); // Close mobile sidebar when resizing to desktop
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    const handleLogout = () => {
+        dispatch(logout());
+        navigate('/admin');
+    };
+
+    let navItems = [];
+
+
+
+    useEffect(() => {
+        // Fetch hospital profile only for admin roles. 
+        // Doctors and receptionists should get their organization data through other means or profile.
+        if (userRole === 'ADMIN' || userRole === 'HOSPITAL') {
+            dispatch(fetchHospitalProfile());
+        }
+    }, [dispatch, userRole]);
 
     if (userRole === 'SUPER_ADMIN') {
         navItems = [
@@ -122,47 +272,107 @@ export default function Layout() {
         ];
     } else if (userRole === 'ADMIN' || userRole === 'HOSPITAL') {
         navItems = [
+            'MAIN',
             { name: 'Dashboard', path: '/hospital-admin', icon: LayoutDashboard },
-            { name: 'Staff Management', path: '/hospital-admin/users', icon: Users },
+            { name: 'Users', path: '/hospital-admin/users', icon: Users },
+            // { name: 'Roles & Permissions', path: '/hospital-admin/roles', icon: Shield },
+            'CLINIC',
+            // { name: 'Clinic Settings', path: '/hospital-admin/clinic-settings', icon: Building2 },
+            { name: 'Working Hours', path: '/hospital-admin/working-hours', icon: Clock },
+            { name: 'Appointments Overview', path: '/hospital-admin/appointments', icon: Calendar },
+            'INSIGHTS',
+            { name: 'Analytics', path: '/hospital-admin/analytics', icon: LineChart },
+            { name: 'Usage Activity', path: '/hospital-admin/activity', icon: Activity },
+            'SYSTEM',
+            // { name: 'Notifications', path: '/hospital-admin/notifications', icon: Bell },
+            { name: 'Branding', path: '/hospital-admin/branding', icon: Palette },
+            // { name: 'Audit Logs (Read-only)', path: '/hospital-admin/audit-logs', icon: FileSignature },
+            // { name: 'Settings', path: '/hospital-admin/settings', icon: Settings },
         ];
     } else if (userRole === 'RECEPTIONIST') {
         navItems = [
             { name: 'Dashboard', path: '/receptionist', icon: LayoutDashboard },
             { name: 'Patients', path: '/receptionist/patients', icon: Users },
-            { name: 'Appointments', path: '/receptionist/appointments', icon: Calendar },
+            { name: 'Calendar', path: '/receptionist/calendar', icon: Calendar },
+            { name: 'Appointments', path: '/receptionist/appointments', icon: ClipboardList },
         ];
     } else {
         // Doctor
         navItems = [
-            { name: 'Dashboard', path: '/', icon: LayoutDashboard },
-            { name: 'Patients', path: '/patients', icon: Users },
-            { name: 'Sessions', path: '/sessions', icon: FileAudio },
+            { name: 'Dashboard', path: '/doctor', icon: LayoutDashboard },
+            { name: 'My Patient', path: '/doctor/patients', icon: Users },
+            { name: 'Appointments', path: '/doctor/schedule', icon: Calendar },
+            { name: 'Session', path: '/sessions', icon: Video },
+            { name: 'SOAP Notes', path: '/doctor/soap-notes', icon: FileText },
+            // { name: 'Session Summaries', path: '/doctor/summaries', icon: ClipboardList },
+            // { name: 'Treatment Plans', path: '/doctor/treatment-plans', icon: HeartPulse },
+            // { name: 'Longitudinal Trends', path: '/doctor/trends', icon: LineChart },
+            // { name: 'Deleted Records', path: '/doctor/deleted', icon: Trash },
+            // { name: 'Settings', path: '/doctor/settings', icon: Settings },
         ];
     }
 
     return (
-        <div className="flex h-screen bg-slate-50/50 relative overflow-hidden">
+        <div className="flex h-screen bg-[#062f3f] relative overflow-hidden">
             {/* Success Toast Notification */}
+            {/* Appointment Reminders */}
+            <div className="fixed top-24 right-6 lg:right-8 z-[100] flex flex-col gap-3 pointer-events-none">
+                <AnimatePresence>
+                    {activeReminders.map((reminder) => (
+                        <motion.div
+                            key={reminder.id}
+                            initial={{ opacity: 0, x: 50, scale: 0.9 }}
+                            animate={{ opacity: 1, x: 0, scale: 1 }}
+                            exit={{ opacity: 0, x: 20, scale: 0.9, filter: "blur(5px)" }}
+                            className="pointer-events-auto p-4 bg-indigo-900/95 backdrop-blur-xl border border-indigo-400/30 rounded-2xl flex items-center gap-4 shadow-2xl min-w-[320px] relative overflow-hidden group"
+                        >
+                            <div className="h-11 w-11 bg-indigo-500/20 text-indigo-400 rounded-full flex items-center justify-center shrink-0 border border-indigo-500/30 ring-4 ring-indigo-500/10">
+                                <Clock size={22} />
+                            </div>
+                            <div className="pr-2">
+                                <h4 className="text-sm font-bold text-white tracking-wide mb-0.5">{reminder.title}</h4>
+                                <p className="text-xs font-semibold text-indigo-100/80">{reminder.message}</p>
+                                <p className="text-[10px] font-black text-indigo-400 uppercase mt-1">Starts at {reminder.time}</p>
+                            </div>
+                            <button
+                                onClick={() => setActiveReminders(prev => prev.filter(r => r.id !== reminder.id))}
+                                className="ml-auto p-1.5 hover:bg-white/10 text-white/50 hover:text-white rounded-xl transition-colors"
+                            >
+                                <X size={16} />
+                            </button>
+                        </motion.div>
+                    ))}
+                </AnimatePresence>
+            </div>
+
             <AnimatePresence>
                 {successMessage && (
                     <motion.div
-                        initial={{ opacity: 0, x: -20, y: 20 }}
-                        animate={{ opacity: 1, x: 0, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        className="fixed top-6 lg:top-8 left-6 lg:left-8 z-[100] p-4 bg-emerald-50 border-2 border-emerald-100 rounded-2xl flex items-center gap-3 shadow-2xl shadow-emerald-500/20 backdrop-blur-md"
+                        initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95, filter: "blur(10px)" }}
+                        transition={{ duration: 0.3, ease: "easeOut" }}
+                        className="fixed top-6 lg:top-8 right-6 lg:right-8 z-[100] p-4 bg-[#062f3f]/95 backdrop-blur-xl border border-emerald-500/30 rounded-2xl flex items-center gap-4 shadow-[0_8px_30px_rgb(0,0,0,0.3)] shadow-emerald-500/20 min-w-[320px] overflow-hidden"
                     >
-                        <div className="h-8 w-8 bg-emerald-500 text-white rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
-                            <CheckCircle2 size={18} />
+                        {/* Shimmer effect */}
+                        <motion.div
+                            animate={{ x: ["-100%", "200%"] }}
+                            transition={{ duration: 2.5, repeat: Infinity, ease: "linear", repeatDelay: 1 }}
+                            className="absolute inset-0 w-1/2 bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-12 pointer-events-none"
+                        />
+
+                        <div className="relative z-10 h-11 w-11 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center shrink-0 border border-emerald-500/30 ring-4 ring-emerald-500/10">
+                            <CheckCircle2 size={22} className="drop-shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
                         </div>
-                        <div>
-                            <p className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em] leading-none mb-1">System Message</p>
-                            <p className="text-sm font-black text-emerald-900 uppercase tracking-tight">{successMessage}</p>
+                        <div className="relative z-10 pr-2">
+                            <h4 className="text-sm font-bold text-white tracking-wide mb-0.5 shadow-sm">Authentication Status</h4>
+                            <p className="text-xs font-semibold text-emerald-200/80">{successMessage}</p>
                         </div>
                         <button
                             onClick={() => dispatch(clearSuccessMessage())}
-                            className="ml-4 p-1 hover:bg-emerald-100 rounded-lg transition-colors text-emerald-400"
+                            className="relative z-10 ml-auto p-1.5 hover:bg-white/10 text-white/50 hover:text-white rounded-xl transition-colors flex-shrink-0"
                         >
-                            <X size={14} />
+                            <X size={16} />
                         </button>
                     </motion.div>
                 )}
@@ -176,7 +386,7 @@ export default function Layout() {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={() => setIsSidebarOpen(false)}
-                        className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+                        className="fixed inset-0 bg-black/60 z-40 lg:hidden backdrop-blur-sm"
                     />
                 )}
             </AnimatePresence>
@@ -185,12 +395,12 @@ export default function Layout() {
                 <motion.div
                     animate={{ scale: [1, 1.2, 1], rotate: [0, 90, 0] }}
                     transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
-                    className="absolute -top-40 -left-40 w-80 h-80 bg-primary-400/5 rounded-full blur-3xl"
+                    className="absolute -top-40 -left-40 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl"
                 />
                 <motion.div
                     animate={{ scale: [1, 1.3, 1], rotate: [0, -90, 0] }}
                     transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
-                    className="absolute -bottom-40 -right-40 w-80 h-80 bg-purple-400/5 rounded-full blur-3xl"
+                    className="absolute -bottom-40 -right-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl"
                 />
             </div>
 
@@ -198,49 +408,90 @@ export default function Layout() {
             <motion.aside
                 initial={false}
                 animate={{
-                    x: isDesktop ? 0 : (isSidebarOpen ? 0 : '-100%')
+                    x: isDesktop ? 0 : (isSidebarOpen ? 0 : '-100%'),
+                    width: isDesktop ? (isSidebarCollapsed ? 88 : 288) : 288
                 }}
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="w-72 fixed lg:relative inset-y-0 left-0 z-50 backdrop-blur-xl bg-white/80 border-r border-white/50 flex flex-col shadow-[rgba(0,0,15,0.05)_10px_0px_20px_-5px]"
+                className="w-72 fixed lg:relative inset-y-0 left-0 z-50 bg-[#062f3f] border-r border-white/5 flex flex-col shadow-2xl"
             >
                 {/* Logo Section */}
-                <div className="p-6 lg:p-8 pb-4 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                        <motion.div
-                            whileHover={{ scale: 1.05, rotate: 5 }}
-                            className="bg-gradient-to-br from-primary-600 to-primary-700 p-2.5 rounded-xl text-white shadow-lg shadow-primary-500/30"
-                        >
-                            <BrainCircuit size={28} />
-                        </motion.div>
-                        <div>
-                            <span className="text-2xl font-black text-slate-900 tracking-tight block leading-none">PsycheGraph</span>
-                            <span className="text-[10px] font-bold text-primary-600 uppercase tracking-[0.2em] mt-1 block">Enterprise docs</span>
-                        </div>
+                <div className={cn(
+                    "p-6 pb-4 flex items-center gap-3 border-b border-white/5 transition-all",
+                    isSidebarCollapsed ? "justify-center px-2" : "justify-between"
+                )}>
+                    <div className="flex items-center gap-3 w-full">
+                        {(() => {
+                            // Use org logo for all roles if available from hospital profile
+                            const rawLogo = currentOrg?.logo
+                                || currentOrg?.logo_url
+                                || currentOrg?.profile_picture
+                                || currentOrg?.image;
+                            const logoSrc = resolveLogoSrc(rawLogo);
+                            return logoSrc ? (
+                                <motion.img
+                                    whileHover={{ scale: 1.05 }}
+                                    src={logoSrc}
+                                    alt="Organization Logo"
+                                    className="h-10 w-10 object-contain rounded-xl shrink-0 bg-white/10 p-1"
+                                    onError={(e) => { e.target.style.display = 'none'; }}
+                                />
+                            ) : (
+                                <motion.div
+                                    whileHover={{ scale: 1.05, rotate: 5 }}
+                                    className="bg-gradient-to-br from-blue-500 to-cyan-500 p-2 rounded-xl text-white shadow-lg shadow-cyan-500/30 flex-shrink-0"
+                                >
+                                    <BrainCircuit size={24} />
+                                </motion.div>
+                            );
+                        })()}
+                        {!isSidebarCollapsed && (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="flex-1 overflow-hidden"
+                            >
+                                <span className="text-xl font-black text-white tracking-tight block leading-none truncate"
+                                    title={currentOrg?.full_name || currentOrg?.name || 'PsycheGraph'}>
+                                    {currentOrg?.full_name || currentOrg?.name || 'PsycheGraph'}
+                                </span>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <span className={cn(
+                                        "text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 mt-2 rounded",
+                                        roleConfig.bg, roleConfig.text
+                                    )}>
+                                        {roleConfig.label}
+                                    </span>
+                                </div>
+                            </motion.div>
+                        )}
                     </div>
                     {/* Close button for mobile */}
-                    <button
-                        onClick={() => setIsSidebarOpen(false)}
-                        className="lg:hidden p-2 hover:bg-slate-100 rounded-xl transition-colors"
-                    >
-                        <X size={20} className="text-slate-500" />
-                    </button>
+                    {!isDesktop && (
+                        <button
+                            onClick={() => setIsSidebarOpen(false)}
+                            className="p-1.5 hover:bg-white/5 rounded-lg transition-colors flex-shrink-0"
+                        >
+                            <X size={18} className="text-white/60" />
+                        </button>
+                    )}
                 </div>
 
-                {/* Search Bar - Aesthetic addition */}
-                {/* <div className="px-6 mb-4">
-                    <div className="relative group">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-500 transition-colors" size={16} />
-                        <input
-                            type="text"
-                            placeholder="Quick find..."
-                            className="w-full bg-slate-100/50 border-none rounded-xl py-2 pl-10 pr-4 text-xs font-medium focus:ring-2 focus:ring-primary-500/20 outline-none transition-all placeholder:text-slate-400"
-                        />
-                    </div>
-                </div> */}
+                <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+                    {navItems.map((item, index) => {
+                        // Handle Group Headers
+                        if (typeof item === 'string') {
+                            if (isSidebarCollapsed) {
+                                return <div key={`group-${index}`} className="h-6" />; // Spacing when collapsed
+                            }
+                            return (
+                                <p key={`group-${index}`} className="px-3 pt-4 pb-2 text-[10px] font-semibold text-white/30 uppercase tracking-wider">
+                                    {item}
+                                </p>
+                            );
+                        }
 
-                <nav className="flex-1 px-4 py-4 space-y-2 overflow-y-auto custom-scrollbar">
-                    <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Main Menu</p>
-                    {navItems.map((item) => {
+                        // Handle Normal Navigation Links
                         const isActive = location.pathname === item.path;
                         return (
                             <Link
@@ -250,32 +501,33 @@ export default function Layout() {
                                 className="relative group block"
                             >
                                 <motion.div
-                                    whileHover={{ x: 5 }}
+                                    whileHover={{ x: 4 }}
                                     className={cn(
-                                        "flex items-center gap-3 px-4 py-3 rounded-2xl transition-all relative overflow-hidden",
+                                        "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all relative overflow-hidden",
                                         isActive
-                                            ? "text-primary-600"
-                                            : "text-slate-500 hover:text-slate-900"
+                                            ? "text-white bg-white/10"
+                                            : "text-white/60 hover:text-white hover:bg-white/5"
                                     )}
                                 >
-                                    {isActive && (
-                                        <motion.div
-                                            layoutId="nav-active"
-                                            className="absolute inset-0 bg-primary-50 rounded-2xl z-0"
-                                            transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                                        />
-                                    )}
                                     <div className={cn(
-                                        "relative z-10 transition-transform duration-300 group-hover:scale-110",
-                                        isActive && "text-primary-600"
+                                        "relative z-10 transition-all flex-shrink-0",
+                                        isActive && "text-cyan-400"
                                     )}>
-                                        <item.icon size={20} />
+                                        <item.icon size={18} strokeWidth={2.5} />
                                     </div>
-                                    <span className="relative z-10 font-bold text-sm tracking-tight">{item.name}</span>
+                                    {!isSidebarCollapsed && (
+                                        <motion.span
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            className="relative z-10 font-bold text-[13px] tracking-tight truncate flex-1"
+                                        >
+                                            {item.name}
+                                        </motion.span>
+                                    )}
                                     {isActive && (
                                         <motion.div
-                                            layoutId="nav-pill"
-                                            className="absolute right-3 w-1.5 h-1.5 rounded-full bg-primary-500 z-10"
+                                            layoutId="nav-indicator"
+                                            className="absolute right-2 w-1 h-1 rounded-full bg-cyan-400 z-10"
                                             transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
                                         />
                                     )}
@@ -286,45 +538,53 @@ export default function Layout() {
                 </nav>
 
                 <div className="p-4 mt-auto">
-                    {/* User Profile Card Removed */}
-
-                    <div className="flex items-center justify-center gap-2 text-[10px] font-bold text-slate-400">
-                        <Sparkles size={10} className="text-primary-400" />
+                    <div className="flex items-center justify-center gap-2 text-[9px] font-bold text-white/20">
+                        <Sparkles size={10} className="text-cyan-500 opacity-50" />
                         <span>V 2.0.4 PREMIUM</span>
                     </div>
                 </div>
             </motion.aside>
 
             {/* Main Content */}
-            <main className="flex-1 relative z-10 overflow-auto custom-scrollbar lg:ml-0">
-                {/* Elegant Top Header */}
-                <header className="sticky top-0 h-16 lg:h-20 backdrop-blur-md bg-white/60 border-b border-white/50 flex items-center justify-between px-4 lg:px-10 z-30 shadow-sm">
+            <main className="flex-1 relative z-10 overflow-auto custom-scrollbar lg:ml-0 bg-slate-50">
+                {/* Elegant Top Header - Dark Theme Match */}
+                <header className="sticky top-0 h-16 lg:h-20 backdrop-blur-xl bg-[#062f3f] border-b border-white/5 flex items-center justify-between px-4 lg:px-10 z-30 shadow-md">
                     {/* Mobile Menu Button */}
                     <button
                         onClick={() => setIsSidebarOpen(true)}
-                        className="lg:hidden p-2 hover:bg-slate-100 rounded-xl transition-colors"
+                        className="lg:hidden p-2 hover:bg-white/5 rounded-xl transition-colors"
                     >
-                        <Menu size={24} className="text-slate-700" />
+                        <Menu size={24} className="text-white/80" />
                     </button>
                     <div className="flex items-center gap-4 lg:gap-6">
-                        <div className="hidden lg:flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        <div className="hidden lg:flex items-center gap-2 text-xs font-bold text-white/40 uppercase tracking-widest">
                             <span>Platform</span>
                             <ChevronRight size={14} />
-                            <span className="text-primary-600">{navItems.find(i => i.path === location.pathname)?.name || 'Home'}</span>
+                            <span className="text-cyan-400 font-black">{navItems.find(i => i.path === location.pathname)?.name || 'Home'}</span>
                         </div>
                     </div>
 
                     <div className="flex items-center gap-2 lg:gap-4">
-                        
+                        {/* Notifications Bell (Only shows if ANY setting is toggled ON) */}
+                        {userRole === 'DOCTOR' && hasAnyNotificationEnabled && (
+                            <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                className="relative p-2.5 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-white/5 group"
+                            >
+                                <Bell size={20} className="text-white/80 group-hover:text-white transition-colors" />
+                                <span className="absolute top-2 right-2.5 w-2 h-2 rounded-full bg-red-500 ring-2 ring-[#062f3f]" />
+                            </motion.button>
+                        )}
 
-                        <div className="hidden sm:block h-10 w-px bg-slate-200 mx-2" />
+                        <div className="hidden sm:block h-10 w-px bg-slate-200/20 mx-2" />
 
                         {/* Profile Dropdown */}
                         <div className="relative" ref={profileRef}>
                             <motion.button
                                 whileHover={{ scale: 1.02 }}
                                 onClick={() => setIsProfileOpen(!isProfileOpen)}
-                                className="flex items-center gap-2 lg:gap-3 pl-1 pr-2 lg:pr-3 py-1 bg-white rounded-xl lg:rounded-2xl shadow-sm border border-slate-100 overflow-hidden cursor-pointer"
+                                className="flex items-center gap-2 lg:gap-3 pl-1 pr-2 lg:pr-3 py-1 bg-white/5 hover:bg-white/10 rounded-xl lg:rounded-2xl shadow-lg border border-white/5 overflow-hidden cursor-pointer backdrop-blur-md transition-all"
                             >
                                 <div className={cn(
                                     "h-7 w-7 lg:h-8 lg:w-8 rounded-lg lg:rounded-xl flex items-center justify-center text-white text-xs lg:text-sm font-bold bg-gradient-to-br",
@@ -334,8 +594,8 @@ export default function Layout() {
                                     {(user?.full_name?.[0] || user?.sub?.[0] || 'U')?.toUpperCase()}
                                 </div>
                                 <div className="hidden md:block text-left">
-                                    <p className="text-[11px] font-black text-slate-900 leading-none">{user?.full_name || user?.sub}</p>
-                                    <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">{roleConfig.label}</p>
+                                    <p className="text-[11px] font-black text-white leading-none">{user?.full_name || user?.sub}</p>
+                                    <p className="text-[10px] font-bold text-white/40 mt-1 uppercase tracking-tighter">{roleConfig.label}</p>
                                 </div>
                             </motion.button>
 
@@ -386,3 +646,4 @@ export default function Layout() {
         </div>
     );
 }
+

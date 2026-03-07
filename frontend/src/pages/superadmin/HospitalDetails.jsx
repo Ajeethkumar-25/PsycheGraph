@@ -20,7 +20,8 @@ import {
 } from 'lucide-react';
 import { fetchOrganizations } from '../../store/slices/OrgSlice';
 import { fetchUsers, fetchUserById, clearSelectedUser } from '../../store/slices/AllUserSlice';
-import { fetchPatients } from '../../store/slices/PatientSlice';
+import { fetchPatients, fetchPatientById, clearSelectedPatient, setCurrentPatient } from '../../store/slices/PatientSlice';
+
 
 const cn = (...classes) => classes.filter(Boolean).join(' ');
 
@@ -29,7 +30,7 @@ export default function HospitalDetails() {
     const navigate = useNavigate();
     const { list: organizations, loading: orgLoading } = useSelector((state) => state.organizations);
     const { list: users, loading: userLoading, selectedUser } = useSelector((state) => state.users);
-    const { list: patients, loading: patLoading } = useSelector((state) => state.patients);
+    const { list: patients, loading: patLoading, currentPatient } = useSelector((state) => state.patients);
 
     const [selectedOrgId, setSelectedOrgId] = useState(null);
     const [activeTab, setActiveTab] = useState('DOCTOR'); // DOCTOR, RECEPTIONIST, PATIENT
@@ -69,13 +70,18 @@ export default function HospitalDetails() {
 
     const currentList = filteredData();
 
-    const handleUserClick = (user) => {
-        if (activeTab === 'PATIENT') return; // Not implemented for patients yet
-        dispatch(fetchUserById({ id: user.id, role: user.role }));
+    const handleUserClick = (item) => {
+        if (activeTab === 'PATIENT') {
+            dispatch(setCurrentPatient(item));
+            dispatch(fetchPatientById(item.id));
+        } else {
+            dispatch(fetchUserById({ id: item.id, role: item.role }));
+        }
     };
 
     const closeUserModal = () => {
         dispatch(clearSelectedUser());
+        dispatch(clearSelectedPatient());
     };
 
     const containerVariants = {
@@ -100,13 +106,13 @@ export default function HospitalDetails() {
         >
             {/* User Details Modal */}
             <AnimatePresence>
-                {selectedUser && (
+                {(selectedUser || currentPatient) && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
                         <motion.div
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.95 }}
-                            className="bg-white rounded-2xl md:rounded-[2.5rem] shadow-2xl w-full max-w-[90%] sm:max-w-md md:max-w-lg overflow-hidden relative"
+                            className="bg-white rounded-2xl md:rounded-[2.5rem] shadow-2xl w-full max-w-[90%] sm:max-w-md md:max-w-md overflow-y-auto overflow-x-hidden custom-scrollbar relative max-h-[85vh] flex flex-col"
                         >
                             <button
                                 onClick={closeUserModal}
@@ -118,67 +124,153 @@ export default function HospitalDetails() {
                             <div className="h-24 md:h-32 bg-gradient-to-r from-primary-600 to-purple-600 relative">
                                 <div className="absolute -bottom-12 md:-bottom-16 left-4 md:left-8 p-1 bg-white rounded-2xl md:rounded-3xl">
                                     <div className="h-20 w-20 md:h-28 md:w-28 bg-slate-100 rounded-[1rem] md:rounded-[1.3rem] flex items-center justify-center text-2xl md:text-4xl font-black text-slate-300">
-                                        {(selectedUser.full_name || 'U')[0]}
+                                        {((selectedUser?.full_name || currentPatient?.full_name || 'U'))[0]}
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="pt-14 md:pt-20 px-4 md:px-8 pb-4 md:pb-8 space-y-4 md:space-y-6">
+                            <div className="pt-14 md:pt-16 px-4 md:px-8 pb-4 md:pb-6 space-y-4 md:space-y-5">
                                 <div>
                                     <h2 className="text-2xl md:text-3xl font-black text-slate-900 leading-tight">
-                                        {selectedUser.full_name}
+                                        {selectedUser?.full_name || currentPatient?.full_name}
                                     </h2>
                                     <div className="flex items-center gap-2 mt-2">
                                         <span className="px-3 py-1 bg-primary-50 text-primary-700 text-xs font-black uppercase tracking-widest rounded-full">
-                                            {selectedUser.role}
+                                            {selectedUser ? selectedUser.role : 'PATIENT'}
                                         </span>
                                         <span className={cn(
                                             "px-3 py-1 text-xs font-black uppercase tracking-widest rounded-full flex items-center gap-1",
-                                            selectedUser.is_active !== false ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+                                            (selectedUser || currentPatient)?.is_active !== false ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
                                         )}>
                                             <div className={cn(
                                                 "w-1.5 h-1.5 rounded-full",
-                                                selectedUser.is_active !== false ? "bg-emerald-500 animate-pulse" : "bg-red-500"
+                                                (selectedUser || currentPatient)?.is_active !== false ? "bg-emerald-500 animate-pulse" : "bg-red-500"
                                             )} />
-                                            {selectedUser.is_active !== false ? "Active" : "Inactive"}
+                                            {(selectedUser || currentPatient)?.is_active !== false ? "Active" : "Inactive"}
                                         </span>
                                     </div>
                                 </div>
 
-                                <div className="space-y-3 md:space-y-4">
-                                    <div className="p-3 md:p-4 bg-slate-50 rounded-xl md:rounded-2xl flex items-center gap-3 md:gap-4">
-                                        <div className="p-2 md:p-3 bg-white rounded-lg md:rounded-xl text-slate-400 shadow-sm">
-                                            <Mail size={18} className="md:w-5 md:h-5" />
+                                <div className="space-y-3 md:space-y-3">
+                                    <div className="p-3 md:p-3 bg-slate-50 rounded-xl md:rounded-2xl flex items-center gap-3 md:gap-4 flex-wrap">
+                                        <div className="p-2 md:p-2 bg-white rounded-lg md:rounded-xl text-slate-400 shadow-sm shrink-0">
+                                            <Mail size={16} className="md:w-4 md:h-4" />
                                         </div>
-                                        <div>
+                                        <div className="min-w-0 flex-1">
                                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email Address</p>
-                                            <p className="font-bold text-slate-700 text-sm md:text-base break-all">{selectedUser.email}</p>
+                                            <p className="font-bold text-slate-700 text-sm md:text-sm truncate">{selectedUser?.email || currentPatient?.email || 'N/A'}</p>
                                         </div>
                                     </div>
 
-                                    <div className="p-3 md:p-4 bg-slate-50 rounded-xl md:rounded-2xl flex items-center gap-3 md:gap-4">
-                                        <div className="p-2 md:p-3 bg-white rounded-lg md:rounded-xl text-slate-400 shadow-sm">
-                                            <Building2 size={18} className="md:w-5 md:h-5" />
+                                    <div className="p-3 md:p-3 bg-slate-50 rounded-xl md:rounded-2xl flex items-center gap-3 md:gap-4 flex-wrap">
+                                        <div className="p-2 md:p-2 bg-white rounded-lg md:rounded-xl text-slate-400 shadow-sm shrink-0">
+                                            <Building2 size={16} className="md:w-4 md:h-4" />
                                         </div>
-                                        <div>
+                                        <div className="min-w-0 flex-1">
                                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hospital</p>
-                                            <p className="font-bold text-slate-700 text-sm md:text-base">
-                                                {organizations.find(o => o.id === selectedUser.organization_id)?.name || 'Unknown Organization'}
+                                            <p className="font-bold text-slate-700 text-sm md:text-sm truncate">
+                                                {organizations.find(o => String(o.id) === String(selectedUser?.organization_id || currentPatient?.organization_id))?.name || 'Unknown Hospital'}
                                             </p>
                                         </div>
                                     </div>
 
-                                    <div className="p-3 md:p-4 bg-slate-50 rounded-xl md:rounded-2xl flex items-center gap-3 md:gap-4">
-                                        <div className="p-2 md:p-3 bg-white rounded-lg md:rounded-xl text-slate-400 shadow-sm">
-                                            <Users size={18} className="md:w-5 md:h-5" />
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Assigned Patients</p>
-                                            <p className="font-bold text-slate-700 text-sm md:text-base">
-                                                {patients.filter(p => p.doctor_id === selectedUser.id).length} Patients
-                                            </p>
-                                        </div>
-                                    </div>
+                                    {selectedUser && selectedUser.role === 'DOCTOR' && (
+                                        <>
+                                            <div className="p-3 md:p-3 bg-slate-50 rounded-xl md:rounded-2xl flex items-center gap-3 md:gap-4 flex-wrap">
+                                                <div className="p-2 md:p-2 bg-white rounded-lg md:rounded-xl text-slate-400 shadow-sm shrink-0">
+                                                    <UserCheck size={16} className="md:w-4 md:h-4" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Receptionist</p>
+                                                    <p className="font-bold text-slate-700 text-sm md:text-sm truncate">
+                                                        {(() => {
+                                                            const reps = users.filter(u =>
+                                                                u.role === 'RECEPTIONIST' && (
+                                                                    String(u.doctor_id) === String(selectedUser.id) ||
+                                                                    (u.assigned_doctors && u.assigned_doctors.some(d => String(d.doctor_id || d.id) === String(selectedUser.id)))
+                                                                )
+                                                            );
+                                                            return reps.length > 0 ? reps.map(r => r.full_name || r.name).join(', ') : 'Unassigned';
+                                                        })()}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="p-3 md:p-3 bg-slate-50 rounded-xl md:rounded-2xl flex items-center gap-3 md:gap-4 flex-wrap">
+                                                <div className="p-2 md:p-2 bg-white rounded-lg md:rounded-xl text-slate-400 shadow-sm shrink-0">
+                                                    <Users size={16} className="md:w-4 md:h-4" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Assigned Patients</p>
+                                                    <p className="font-bold text-slate-700 text-sm md:text-sm truncate">
+                                                        {patients.filter(p => String(p.doctor_id) === String(selectedUser.id)).length} Patients
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {selectedUser && selectedUser.role === 'RECEPTIONIST' && (
+                                        <>
+                                            <div className="p-3 md:p-3 bg-slate-50 rounded-xl md:rounded-2xl flex items-center gap-3 md:gap-4 flex-wrap">
+                                                <div className="p-2 md:p-2 bg-white rounded-lg md:rounded-xl text-slate-400 shadow-sm shrink-0">
+                                                    <Stethoscope size={16} className="md:w-4 md:h-4" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Assigned Doctors</p>
+                                                    <p className="font-bold text-slate-700 text-sm md:text-sm truncate">
+                                                        {selectedUser.assigned_doctors?.length > 0
+                                                            ? selectedUser.assigned_doctors.map(d => d.name || d.full_name || users.find(u => String(u.id) === String(d.doctor_id || d.id))?.full_name).filter(Boolean).join(', ')
+                                                            : (users.find(u => String(u.id) === String(selectedUser.doctor_id))?.full_name || 'Unassigned')}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="p-3 md:p-3 bg-slate-50 rounded-xl md:rounded-2xl flex items-center gap-3 md:gap-4 flex-wrap">
+                                                <div className="p-2 md:p-2 bg-white rounded-lg md:rounded-xl text-slate-400 shadow-sm shrink-0">
+                                                    <Users size={16} className="md:w-4 md:h-4" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Associated Patients</p>
+                                                    <p className="font-bold text-slate-700 text-sm md:text-sm truncate">
+                                                        {(() => {
+                                                            const assignedDoctorIds = selectedUser.assigned_doctors?.map(d => String(d.doctor_id || d.id)) || [String(selectedUser.doctor_id)];
+                                                            return patients.filter(p =>
+                                                                String(p.created_by) === String(selectedUser.id) ||
+                                                                assignedDoctorIds.includes(String(p.doctor_id))
+                                                            ).length;
+                                                        })()} Patients
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {currentPatient && (
+                                        <>
+                                            <div className="p-3 md:p-3 bg-slate-50 rounded-xl md:rounded-2xl flex items-center gap-3 md:gap-4 flex-wrap">
+                                                <div className="p-2 md:p-2 bg-white rounded-lg md:rounded-xl text-slate-400 shadow-sm shrink-0">
+                                                    <Stethoscope size={16} className="md:w-4 md:h-4" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Assigned Doctor</p>
+                                                    <p className="font-bold text-slate-700 text-sm md:text-sm truncate">
+                                                        {users.find(u => String(u.id) === String(currentPatient.doctor_id))?.full_name || 'Unassigned'}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div className="p-3 md:p-3 bg-slate-50 rounded-xl md:rounded-2xl flex items-center gap-3 md:gap-4 flex-wrap">
+                                                <div className="p-2 md:p-2 bg-white rounded-lg md:rounded-xl text-slate-400 shadow-sm shrink-0">
+                                                    <UserCheck size={16} className="md:w-4 md:h-4" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Receptionist</p>
+                                                    <p className="font-bold text-slate-700 text-sm md:text-sm truncate">
+                                                        {users.find(u => String(u.id) === String(currentPatient.created_by))?.full_name || 'System Registry'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
 
                                 <div className="pt-4 border-t border-slate-100">
@@ -195,8 +287,8 @@ export default function HospitalDetails() {
             {/* Header */}
             <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-4xl font-black text-slate-900 tracking-tight mb-2">
-                        Hospital <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-600 to-purple-600">Intelligence</span>
+                    <h1 className="text-4xl font-black text-slate-800 tracking-tight mb-2">
+                        Hospital <span className="text-transparent bg-clip-text bg-slate-800">Intelligence</span>
                     </h1>
                     <p className="text-slate-500 font-medium flex items-center gap-2">
                         <Hospital size={18} className="text-primary-500" />
@@ -240,13 +332,6 @@ export default function HospitalDetails() {
                                 {org.name[0]}
                             </div>
                             <p className="font-black text-sm uppercase tracking-tight truncate">{org.name}</p>
-                            <p className={cn(
-                                "text-[10px] font-bold mt-1 uppercase tracking-widest",
-                                selectedOrgId === org.id ? "text-white/60" : "text-slate-400"
-                            )}>
-                                {org.license_key}
-                            </p>
-
                         </motion.button>
                     ))}
                 </div>
@@ -336,11 +421,11 @@ export default function HospitalDetails() {
                                         >
                                             <div className="w-full md:col-span-4 flex items-center gap-4">
                                                 <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center border-2 border-white shadow-sm ring-1 ring-slate-200">
-                                                    <span className="text-xl font-black text-slate-900">{(item.full_name || item.name || 'U')[0]}</span>
+                                                    <span className="text-xl font-black text-slate-900">{(item.full_name || item.name || item.patient_name || 'U')[0]}</span>
                                                 </div>
                                                 <div>
                                                     <p className="font-black text-slate-900 uppercase tracking-tight leading-none mb-2 group-hover:text-primary-600 transition-colors">
-                                                        {item.full_name || item.name}
+                                                        {item.full_name || item.name || item.patient_name || 'Unknown User'}
                                                     </p>
                                                     <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
                                                         ID: {item.id}
@@ -355,12 +440,12 @@ export default function HospitalDetails() {
                                                     </div>
                                                     {item.email || 'No email provided'}
                                                 </div>
-                                                {item.phone_number && (
+                                                {(item.phone_number || item.contact_number) && (
                                                     <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
                                                         <div className="p-1 rounded-lg bg-slate-50 text-slate-400">
                                                             <Phone size={14} />
                                                         </div>
-                                                        {item.phone_number}
+                                                        {item.phone_number || item.contact_number}
                                                     </div>
                                                 )}
                                             </div>

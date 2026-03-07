@@ -14,7 +14,10 @@ import {
     Eye,
     EyeOff,
     CheckCircle2,
-    ArrowLeft
+    ArrowLeft,
+    Phone,
+    Upload,
+    Image as ImageIcon
 } from 'lucide-react';
 import { registerHospital, clearError } from '../store/slices/AllLoginSlice';
 import { useNavigate, Link } from 'react-router-dom';
@@ -31,18 +34,44 @@ export default function Register() {
 
     const [showPassword, setShowPassword] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [localError, setLocalError] = useState('');
     const [formData, setFormData] = useState({
         email: '',
         full_name: '',
         password: '',
-        license_key: ''
+        license_key: '',
+        phone_number: '',
+        logo: null
     });
+
+    useEffect(() => {
+        if (localError) setLocalError('');
+    }, [formData.email]);
+
+    const validateEmail = (email) => {
+        const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return regex.test(email);
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setLocalError('');
+        dispatch(clearError());
+
+        if (!validateEmail(formData.email)) {
+            setLocalError('Please enter a valid email address.');
+            return;
+        }
+
+        const data = new FormData();
+        Object.keys(formData).forEach(key => {
+            if (formData[key] !== null) {
+                data.append(key, formData[key]);
+            }
+        });
 
         try {
-            await dispatch(registerHospital(formData)).unwrap();
+            await dispatch(registerHospital(data)).unwrap();
             setSuccess(true);
             setTimeout(() => navigate('/'), 2000);
         } catch (err) {
@@ -154,7 +183,7 @@ export default function Register() {
 
                         <form onSubmit={handleSubmit} className="space-y-5">
                             <AnimatePresence>
-                                {error && (
+                                {(error || localError) && (
                                     <motion.div
                                         initial={{ opacity: 0, height: 0 }}
                                         animate={{ opacity: 1, height: "auto" }}
@@ -162,7 +191,7 @@ export default function Register() {
                                         className="bg-red-50 border border-red-100 rounded-xl p-4 flex items-center gap-3 text-red-600 text-sm overflow-hidden"
                                     >
                                         <AlertCircle size={18} className="shrink-0" />
-                                        <p className="font-medium">{error}</p>
+                                        <p className="font-medium">{localError || (typeof error === 'string' ? error : (error?.msg || JSON.stringify(error)))}</p>
                                     </motion.div>
                                 )}
                             </AnimatePresence>
@@ -176,7 +205,7 @@ export default function Register() {
                                         <input
                                             required
                                             type="text"
-                                            placeholder="John Doe"
+                                            placeholder="Enter Full Name"
                                             className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3.5 pl-12 pr-4 text-slate-900 font-medium placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                                             value={formData.full_name}
                                             onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
@@ -238,6 +267,52 @@ export default function Register() {
                                             value={formData.license_key}
                                             onChange={(e) => setFormData({ ...formData, license_key: e.target.value })}
                                         />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                {/* Phone Number */}
+                                <div className="space-y-2">
+                                    <label className="text-sm font-semibold text-slate-700 ml-1">Phone Number</label>
+                                    <div className="relative group">
+                                        <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors w-5 h-5 pointer-events-none" />
+                                        <input
+                                            type="tel"
+                                            maxLength="10"
+                                            placeholder="1234567890"
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3.5 pl-12 pr-4 text-slate-900 font-medium placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                                            value={formData.phone_number}
+                                            onChange={(e) => setFormData({ ...formData, phone_number: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Logo Upload */}
+                                <div className="space-y-2">
+                                    <label className="text-sm font-semibold text-slate-700 ml-1">Hospital Logo</label>
+                                    <div className="relative group">
+                                        <div className="flex items-center gap-3">
+                                            <input
+                                                type="file"
+                                                id="logo-upload"
+                                                className="hidden"
+                                                accept="image/*"
+                                                onChange={(e) => setFormData({ ...formData, logo: e.target.files[0] })}
+                                            />
+                                            <label
+                                                htmlFor="logo-upload"
+                                                className="flex-1 flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl py-3.5 px-4 cursor-pointer hover:bg-slate-100 transition-all group-focus-within:ring-2 group-focus-within:ring-indigo-500/20 group-focus-within:border-indigo-500"
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <Upload size={18} className="text-slate-400" />
+                                                    <span className="text-slate-500 text-sm font-medium">
+                                                        {formData.logo ? formData.logo.name : "Upload Logo"}
+                                                    </span>
+                                                </div>
+                                                {formData.logo && <ImageIcon size={18} className="text-indigo-500" />}
+                                            </label>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

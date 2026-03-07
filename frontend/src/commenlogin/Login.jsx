@@ -28,7 +28,7 @@ export default function Login({
         setRoleError(null);
 
         const loginThunk = isHospitalPortal ? loginHospital : login;
-        const resultAction = await dispatch(loginThunk({ email, password }));
+        const resultAction = await dispatch(loginThunk({ email, password, portal: 'admin' }));
 
         if (login.fulfilled.match(resultAction) || loginHospital.fulfilled.match(resultAction)) {
             const userData = resultAction.payload;
@@ -113,7 +113,6 @@ export default function Login({
                                 {portalTitle}
                             </p>
                         </motion.div>
-
                         {/* Main Card */}
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
@@ -135,14 +134,13 @@ export default function Login({
                                     >
                                         <label className="block text-sm font-bold text-slate-700 ml-1">Email Address</label>
                                         <div className="relative group">
-                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary-600 transition-colors">
-                                                <Mail size={20} />
-                                            </div>
+                                            <Mail className="absolute left-4.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-600 transition-colors w-5 h-5 z-20 pointer-events-none" />
                                             <input
                                                 type="email"
                                                 required
                                                 value={email}
                                                 onChange={(e) => setEmail(e.target.value)}
+                                                autoComplete="off"
                                                 className="block w-full pl-11 md:pl-12 pr-4 py-3 md:py-3.5 bg-white/50 backdrop-blur-sm border-2 border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-500/20 focus:border-primary-500 transition-all outline-none text-slate-900 placeholder:text-slate-400 font-medium text-sm md:text-base"
                                                 placeholder="name@organization.com"
                                             />
@@ -158,16 +156,15 @@ export default function Login({
                                     >
                                         <label className="block text-sm font-bold text-slate-700 ml-1">Password</label>
                                         <div className="relative group">
-                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary-600 transition-colors">
-                                                <Lock size={20} />
-                                            </div>
+                                            <Lock className="absolute left-4.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary-600 transition-colors w-5 h-5 z-20 pointer-events-none" />
                                             <input
                                                 type={showPassword ? "text" : "password"}
                                                 required
                                                 value={password}
                                                 onChange={(e) => setPassword(e.target.value)}
+                                                autoComplete="new-password"
                                                 className="block w-full pl-11 md:pl-12 pr-11 md:pr-12 py-3 md:py-3.5 bg-white/50 backdrop-blur-sm border-2 border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-500/20 focus:border-primary-500 transition-all outline-none text-slate-900 placeholder:text-slate-400 font-medium text-sm md:text-base"
-                                                placeholder="••••••••"
+                                                placeholder="Enter your password"
                                             />
                                             <motion.button
                                                 whileHover={{ scale: 1.1 }}
@@ -176,7 +173,7 @@ export default function Login({
                                                 onClick={() => setShowPassword(!showPassword)}
                                                 className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-primary-600 transition-colors"
                                             >
-                                                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                                {showPassword ? <Eye size={20} /> : <EyeOff size={20} />}
                                             </motion.button>
                                         </div>
                                     </motion.div>
@@ -242,18 +239,7 @@ export default function Login({
                                     >
 
 
-                                        <div className="text-center mt-6">
-                                            <p className="text-xs text-slate-500 mb-4 font-bold uppercase tracking-widest">
-                                                New Hospital?
-                                            </p>
-                                            <Link
-                                                to="/register"
-                                                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl border-2 border-slate-100 hover:border-primary-100 hover:bg-primary-50 text-slate-600 hover:text-primary-600 font-black text-xs uppercase tracking-[0.2em] transition-all"
-                                            >
-                                                <UserPlus size={16} />
-                                                Create Account
-                                            </Link>
-                                        </div>
+
                                     </motion.div>
                                 )}
                             </div>
@@ -362,12 +348,13 @@ export default function Login({
                             <div className="space-y-2">
                                 <label className="text-sm font-semibold text-slate-700 ml-1">Email Address</label>
                                 <div className="relative group">
-                                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors w-5 h-5 pointer-events-none" />
+                                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors w-5 h-5 z-20 pointer-events-none" />
                                     <input
                                         type="email"
                                         required
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
+                                        autoComplete="off"
                                         className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3.5 pl-12 pr-4 text-slate-900 font-medium placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200"
                                         placeholder="Enter your email"
                                     />
@@ -380,12 +367,13 @@ export default function Login({
                                     <label className="text-sm font-semibold text-slate-700">Password</label>
                                 </div>
                                 <div className="relative group">
-                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors w-5 h-5 pointer-events-none" />
+                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors w-5 h-5 z-20 pointer-events-none" />
                                     <input
                                         type={showPassword ? "text" : "password"}
                                         required
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
+                                        autoComplete="new-password"
                                         className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3.5 pl-12 pr-12 text-slate-900 font-medium placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200"
                                         placeholder="Enter your password"
                                     />
@@ -394,7 +382,7 @@ export default function Login({
                                         onClick={() => setShowPassword(!showPassword)}
                                         className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors focus:outline-none"
                                     >
-                                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                        {showPassword ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
                                     </button>
                                 </div>
                             </div>
@@ -410,7 +398,9 @@ export default function Login({
                                         <div className="bg-red-100 p-1 rounded-full shrink-0">
                                             <ShieldCheck size={14} className="text-red-500" />
                                         </div>
-                                        <p className="font-medium">{error}</p>
+                                        <p className="font-medium">
+                                            {typeof error === 'string' ? error : (error.msg || JSON.stringify(error))}
+                                        </p>
                                     </motion.div>
                                 )}
                             </AnimatePresence>

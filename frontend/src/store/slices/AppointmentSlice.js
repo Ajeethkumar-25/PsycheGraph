@@ -57,6 +57,22 @@ export const updateAppointment = createAsyncThunk('appointments/update', async (
     }
 });
 
+export const rescheduleAppointment = createAsyncThunk('appointments/reschedule', async ({ id, data }, { rejectWithValue }) => {
+    try {
+        return await AppointmentService.rescheduleAppointment(id, data);
+    } catch (error) {
+        return rejectWithValue(error.response?.data?.detail || 'Failed to reschedule appointment');
+    }
+});
+
+export const fetchUpdatedAppointments = createAsyncThunk('appointments/fetchUpdated', async (_, { rejectWithValue }) => {
+    try {
+        return await AppointmentService.fetchUpdatedAppointments();
+    } catch (error) {
+        return rejectWithValue(error.response?.data?.detail || 'Failed to fetch updated appointments');
+    }
+});
+
 export const deleteAppointment = createAsyncThunk('appointments/delete', async (id, { rejectWithValue }) => {
     try {
         return await AppointmentService.deleteAppointment(id);
@@ -91,6 +107,13 @@ const appointmentSlice = createSlice({
             .addCase(updateAppointment.fulfilled, (state, action) => {
                 const index = state.list.findIndex(a => a.id === action.payload.id);
                 if (index !== -1) state.list[index] = action.payload;
+            })
+            .addCase(rescheduleAppointment.fulfilled, (state, action) => {
+                const index = state.list.findIndex(a => a.id === action.payload.id);
+                if (index !== -1) state.list[index] = action.payload;
+            })
+            .addCase(fetchUpdatedAppointments.fulfilled, (state, action) => {
+                state.list = action.payload; // Assuming this returns the full list or we can merge
             })
             .addCase(deleteAppointment.fulfilled, (state, action) => {
                 state.list = state.list.filter(a => a.id !== action.payload);
