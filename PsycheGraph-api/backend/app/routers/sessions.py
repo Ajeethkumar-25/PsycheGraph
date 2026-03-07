@@ -47,6 +47,13 @@ async def create_session(
     if session_in.soap_notes:
         soap_notes_str = json.dumps(session_in.soap_notes.model_dump())
 
+    if session_in.appointment_id:
+        existing_res = await db.execute(
+            select(models.Session).where(models.Session.appointment_id == session_in.appointment_id)
+        )
+        if existing_res.scalars().first():
+            raise HTTPException(status_code=400, detail="A session already exists for this appointment")
+
     new_session = models.Session(
         patient_id=session_in.patient_id,
         doctor_id=actual_doctor_id,
