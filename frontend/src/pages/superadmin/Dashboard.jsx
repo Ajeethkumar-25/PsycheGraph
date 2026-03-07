@@ -6,6 +6,7 @@ import { Building2, Users, CreditCard, Activity, ShieldCheck, Globe, TrendingUp,
 import { fetchOrganizations } from '../../store/slices/OrgSlice';
 import { fetchUsers } from '../../store/slices/AllUserSlice';
 import { fetchPatients } from '../../store/slices/PatientSlice';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
 
 export default function SuperAdminDashboard() {
     const dispatch = useDispatch();
@@ -84,13 +85,91 @@ export default function SuperAdminDashboard() {
 
     const recentActivity = [...organizations]
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-        .slice(0, 5)
+        .slice(0, 4)
         .map(org => ({
             org: org.name,
             action: 'New organization registered',
             time: getTimeAgo(org.created_at),
             status: 'success'
         }));
+
+    const getChartData = () => {
+        const counts = {};
+
+        // Initialize the last 4 months to 0
+        const now = new Date();
+        for (let i = 3; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            const name = d.toLocaleString('default', { month: 'short', year: 'numeric' });
+            counts[key] = { name, count: 0, sortKey: key };
+        }
+
+        organizations.forEach(org => {
+            if (!org.created_at) return;
+            const d = new Date(org.created_at);
+            if (isNaN(d)) return;
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+            // Only add if the month is in our last 4 months window
+            if (counts[key]) {
+                counts[key].count += 1;
+            }
+        });
+
+        return Object.values(counts).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+    };
+
+    const chartData = getChartData();
+
+    // Generate User Growth Data (Doctors, Receptionists, Patients) by Month for the last 3 months
+    const getUserChartData = () => {
+        const dataMap = {};
+
+        // Initialize the last 3 months to 0
+        const now = new Date();
+        for (let i = 2; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            const name = d.toLocaleString('default', { month: 'short', year: 'numeric' });
+            dataMap[key] = { name, Doctors: 0, Receptionists: 0, Patients: 0, sortKey: key };
+        }
+
+        // Helper to process accounts
+        const processAccount = (account, roleType) => {
+            const dateStr = account.created_at || account.date_joined || account.updated_at || account.last_login;
+
+            let d;
+            if (!dateStr) {
+                // Fallback for mocked/migrated accounts without timestamps, so they show in the current month's count
+                d = new Date();
+            } else {
+                d = new Date(dateStr);
+            }
+
+            if (isNaN(d)) return;
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+            // Only add if the month is in our last 3 months window
+            if (dataMap[key]) {
+                dataMap[key][roleType] += 1;
+            }
+        };
+
+        // Categorize Users (Doctors & Receptionists)
+        users.forEach(u => {
+            if (u.role?.toUpperCase() === 'DOCTOR' || u.is_doctor) processAccount(u, 'Doctors');
+            else if (u.role?.toUpperCase() === 'RECEPTIONIST') processAccount(u, 'Receptionists');
+        });
+
+        // Categorize Patients
+        patients.forEach(p => processAccount(p, 'Patients'));
+
+        // Format mapping into array suitable for Recharts, sorted by date format
+        return Object.values(dataMap).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+    };
+
+    const userChartData = getUserChartData();
 
     const containerVariants = {
         hidden: { opacity: 0 },
@@ -210,78 +289,158 @@ export default function SuperAdminDashboard() {
                 </motion.div>
 
                 {/* Activity Section */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
-                    {/* Recent Activity */}
-                    <motion.div
-                        variants={itemVariants}
-                        className="relative backdrop-blur-xl bg-white/80 rounded-2xl shadow-xl border border-white/50 overflow-hidden"
-                    >
-                        <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-primary-50 to-purple-50">
-                            <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                                <Activity className="text-primary-600" size={24} />
-                                Recent Activity
-                            </h3>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            {recentActivity.map((activity, index) => (
-                                <motion.div
-                                    key={index}
-                                    initial={{ opacity: 0, x: -20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: 0.5 + index * 0.1 }}
-                                    whileHover={{ x: 5 }}
-                                    className="flex items-start gap-4 p-4 rounded-xl bg-slate-50 hover:bg-slate-100 transition-all cursor-pointer"
-                                >
-                                    <div className={`p-2 rounded-lg ${activity.status === 'success' ? 'bg-emerald-100' : 'bg-blue-100'
-                                        }`}>
-                                        {activity.status === 'success' ? (
-                                            <CheckCircle2 size={20} className="text-emerald-600" />
-                                        ) : (
-                                            <AlertCircle size={20} className="text-blue-600" />
-                                        )}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 items-start">
+                    {/* Left Column: Organization & User Growth Charts */}
+                    <div className="space-y-6 md:space-y-8 flex flex-col w-full">
+                        {/* Organization Growth Chart */}
+                        <motion.div
+                            variants={itemVariants}
+                            className="relative backdrop-blur-xl bg-white/80 rounded-2xl shadow-xl border border-white/50 overflow-hidden flex flex-col h-[400px]"
+                        >
+                            <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-primary-50 to-purple-50">
+                                <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                                    <TrendingUp className="text-primary-600" size={24} />
+                                    Organization Growth
+                                </h3>
+                            </div>
+                            <div className="p-6 flex-1 w-full h-full min-h-0">
+                                {chartData.length > 0 ? (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
+                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} allowDecimals={false} />
+                                            <Tooltip
+                                                contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)' }}
+                                                labelStyle={{ fontWeight: 'bold', color: '#0f172a' }}
+                                            />
+                                            <Line type="monotone" dataKey="count" name="Organizations" stroke="#6366f1" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-slate-400 font-medium">
+                                        Not enough data to display growth
                                     </div>
-                                    <div className="flex-1">
-                                        <p className="text-sm font-bold text-slate-900">{activity.org}</p>
-                                        <p className="text-sm text-slate-600">{activity.action}</p>
-                                        <p className="text-xs text-slate-400 mt-1">{activity.time}</p>
-                                    </div>
-                                </motion.div>
-                            ))}
-                        </div>
-                    </motion.div>
+                                )}
+                            </div>
+                        </motion.div>
 
-                    {/* Right Column: Quick Actions & Renewals */}
-                    <motion.div
-                        variants={itemVariants}
-                        className="relative backdrop-blur-xl bg-white/80 rounded-2xl shadow-xl border border-white/50 overflow-hidden h-full"
-                    >
-                        <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-blue-50">
-                            <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                                <ShieldCheck className="text-indigo-600" size={24} />
-                                Platform Controls
-                            </h3>
-                        </div>
-                        <div className="p-6 grid grid-cols-1 gap-4">
-                            {[
-                                { label: 'Manage Organizations', icon: Building2, path: '/superadmin/organizations', color: 'blue' },
-                                { label: 'Hospital Intel', icon: Stethoscope, path: '/superadmin/hospitals', color: 'purple' }
-                            ].map((action) => (
-                                <Link
-                                    key={action.label}
-                                    to={action.path}
-                                    className="flex items-center justify-between p-4 rounded-xl bg-slate-50 hover:bg-white hover:shadow-md border border-slate-100 transition-all group"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                                            <action.icon size={20} />
-                                        </div>
-                                        <span className="font-bold text-slate-700">{action.label}</span>
+                        {/* Platform User Growth Line Chart */}
+                        <motion.div
+                            variants={itemVariants}
+                            className="relative backdrop-blur-xl bg-white/80 rounded-2xl shadow-xl border border-white/50 overflow-hidden flex flex-col h-[400px]"
+                        >
+                            <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-cyan-50">
+                                <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                                    <Users className="text-blue-600" size={24} />
+                                    Platform User Signups
+                                </h3>
+                            </div>
+                            <div className="p-6 flex-1 w-full h-full min-h-0">
+                                {userChartData.length > 0 ? (
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart data={userChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
+                                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} allowDecimals={false} />
+                                            <Tooltip
+                                                contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)' }}
+                                                labelStyle={{ fontWeight: 'bold', color: '#0f172a' }}
+                                            />
+                                            <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 'bold' }} />
+                                            <Line type="monotone" dataKey="Doctors" stroke="#6366f1" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                                            <Line type="monotone" dataKey="Patients" stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                                            <Line type="monotone" dataKey="Receptionists" stroke="#f43f5e" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-slate-400 font-medium">
+                                        Not enough data to display user growth
                                     </div>
-                                    <ArrowRight size={18} className="text-slate-300 group-hover:text-primary-500 group-hover:translate-x-1 transition-all" />
-                                </Link>
-                            ))}
-                        </div>
-                    </motion.div>
+                                )}
+                            </div>
+                        </motion.div>
+                    </div>
+
+                    {/* Right Column: Platform Controls & Recent Activity */}
+                    <div className="space-y-6 md:space-y-8 flex flex-col">
+                        {/* Platform Controls */}
+                        <motion.div
+                            variants={itemVariants}
+                            className="relative backdrop-blur-xl bg-white/80 rounded-2xl shadow-xl border border-white/50 overflow-hidden"
+                        >
+                            <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-indigo-50 to-blue-50">
+                                <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                                    <ShieldCheck className="text-indigo-600" size={24} />
+                                    Platform Controls
+                                </h3>
+                            </div>
+                            <div className="p-6 grid grid-cols-1 gap-4">
+                                {[
+                                    { label: 'Manage Organizations', icon: Building2, path: '/superadmin/organizations', color: 'blue' },
+                                    { label: 'Hospital Intel', icon: Stethoscope, path: '/superadmin/hospitals', color: 'purple' }
+                                ].map((action) => (
+                                    <Link
+                                        key={action.label}
+                                        to={action.path}
+                                        className="flex items-center justify-between p-4 rounded-xl bg-slate-50 hover:bg-white hover:shadow-md border border-slate-100 transition-all group"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                                <action.icon size={20} />
+                                            </div>
+                                            <span className="font-bold text-slate-700">{action.label}</span>
+                                        </div>
+                                        <ArrowRight size={18} className="text-slate-300 group-hover:text-primary-500 group-hover:translate-x-1 transition-all" />
+                                    </Link>
+                                ))}
+                            </div>
+                        </motion.div>
+
+                        {/* Recent Activity */}
+                        <motion.div
+                            variants={itemVariants}
+                            className="relative backdrop-blur-xl bg-white/80 rounded-2xl shadow-xl border border-white/50 overflow-hidden flex-1"
+                        >
+                            <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-primary-50 to-purple-50">
+                                <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                                    <Activity className="text-primary-600" size={24} />
+                                    Recent Activity
+                                </h3>
+                            </div>
+                            <div className="p-6 space-y-4">
+                                {recentActivity.map((activity, index) => (
+                                    <motion.div
+                                        key={index}
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: 0.5 + index * 0.1 }}
+                                        whileHover={{ x: 5 }}
+                                        className="flex items-start gap-4 p-4 rounded-xl bg-slate-50 hover:bg-slate-100 transition-all cursor-pointer"
+                                    >
+                                        <div className={`p-2 rounded-lg ${activity.status === 'success' ? 'bg-emerald-100' : 'bg-blue-100'
+                                            }`}>
+                                            {activity.status === 'success' ? (
+                                                <CheckCircle2 size={20} className="text-emerald-600" />
+                                            ) : (
+                                                <AlertCircle size={20} className="text-blue-600" />
+                                            )}
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-sm font-bold text-slate-900">{activity.org}</p>
+                                            <p className="text-sm text-slate-600">{activity.action}</p>
+                                            <p className="text-xs text-slate-400 mt-1">{activity.time}</p>
+                                        </div>
+                                    </motion.div>
+                                ))}
+                                {recentActivity.length === 0 && (
+                                    <div className="text-center py-8 text-slate-500 text-sm font-medium">
+                                        No recent activity to show
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
+                    </div>
                 </div>
             </motion.div>
         </div>

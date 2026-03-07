@@ -1,7 +1,9 @@
 import { useEffect, useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchPatients, deletePatient } from '../../store/slices/PatientSlice';
-import { fetchAppointments, rescheduleAppointment, createAvailability } from '../../store/slices/AppointmentSlice';
+import { fetchAppointments, rescheduleAppointment, createAvailability, fetchUpdatedAppointments } from '../../store/slices/AppointmentSlice';
+import { fetchSessions } from '../../store/slices/SessionSlice';
 import { Search, PlayCircle, Trash2, FileText, Database, ChevronLeft, ChevronRight, Edit3, X, Eye, Video, Trash } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -33,9 +35,11 @@ function TimeSlotButton({ time, selectedTime, onClick, isBooked }) {
 }
 
 export default function DoctorPatients() {
+    const navigate = useNavigate();
     const dispatch = useDispatch();
     const { list: patients, loading } = useSelector((state) => state.patients);
     const { list: appointments } = useSelector((state) => state.appointments);
+    const { list: sessions } = useSelector((state) => state.sessions);
     const { user } = useSelector((state) => state.auth);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('All Status');
@@ -47,7 +51,7 @@ export default function DoctorPatients() {
     const [rescheduleModal, setRescheduleModal] = useState({ isOpen: false, appointmentId: null, doctorId: null, patientAge: null, date: '', time: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    
+
     // Track booked slots for selected doctor on the selected date
     const bookedTimeSlots = useMemo(() => {
         if (!rescheduleModal.date) return new Set();
@@ -118,6 +122,7 @@ export default function DoctorPatients() {
     useEffect(() => {
         dispatch(fetchPatients());
         dispatch(fetchAppointments());
+        dispatch(fetchSessions());
     }, [dispatch]);
 
     const filteredPatients = patients.filter(patient => {
@@ -210,7 +215,7 @@ export default function DoctorPatients() {
             })).unwrap();
 
             setRescheduleModal({ isOpen: false, appointmentId: null, doctorId: null, patientAge: null, date: '', time: '' });
-            dispatch(fetchAppointments()); // Fetch updated appointments list
+            dispatch(fetchUpdatedAppointments()); // Use updated endpoint as requested
         } catch (error) {
             console.error('Failed to reschedule:', error);
             alert(`Failed to reschedule: ${error.message || 'Please try again.'}`);
@@ -263,8 +268,8 @@ export default function DoctorPatients() {
                             <tr>
                                 <th className="px-6 py-4 whitespace-nowrap text-sm">Patient Name</th>
                                 <th className="px-6 py-4 whitespace-nowrap text-sm">Age</th>
-                                <th className="px-6 py-4 whitespace-nowrap text-sm">Diagnosis</th>
-                                <th className="px-6 py-4 whitespace-nowrap text-sm">Last Session</th>
+                                <th className="px-6 py-4 whitespace-nowrap text-sm">Email</th>
+                                <th className="px-6 py-4 whitespace-nowrap text-sm">Time</th>
                                 <th className="px-6 py-4 whitespace-nowrap text-sm">Status</th>
                                 <th className="px-6 py-4 whitespace-nowrap text-sm">Meet Link</th>
                                 <th className="px-6 py-4 whitespace-nowrap text-sm">Notes</th>
@@ -300,18 +305,19 @@ export default function DoctorPatients() {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <p className="text-sm text-slate-600 font-medium">
-                                                    {patient.patient_age || '--'}
+                                                    {patient.age || patient.patient_age || (patient.date_of_birth ? Math.floor((Date.now() - new Date(patient.date_of_birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : '--')}
                                                 </p>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <p className="text-sm text-slate-600 font-medium">
-                                                    {/* Using mock diagnosis as there isn't a native one explicitly shown yet */}
-                                                    {patient.diagnosis || 'Generalized Anxiety Disorder'}
+                                                    {patient.email || '--'}
                                                 </p>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <p className="text-sm text-slate-600 font-medium">
-                                                    {nextApp ? new Date(nextApp.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '--'}
+                                                <p className="text-sm text-slate-600 font-bold">
+                                                    {nextApp?.start_time
+                                                        ? `${new Date(nextApp.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${new Date(nextApp.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                                                        : '--'}
                                                 </p>
                                             </td>
                                             <td className="px-6 py-4">
@@ -336,7 +342,8 @@ export default function DoctorPatients() {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <button
-                                                    className="text-slate-400 hover:text-indigo-600 transition-colors"
+                                                    onClick={() => navigate('/doctor/soap-notes')}
+                                                    className="text-indigo-600 hover:text-indigo-700 transition-colors bg-indigo-50 p-2 rounded-lg"
                                                     title="SOAP Notes"
                                                 >
                                                     <FileText size={18} />
@@ -345,11 +352,17 @@ export default function DoctorPatients() {
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-3">
                                                     <button
-                                                        onClick={() => handleDelete(patient.id)}
-                                                        className="text-slate-400 hover:text-red-500 transition-colors"
-                                                        title="Delete Patient"
+                                                        onClick={() => nextApp && openRescheduleModal(nextApp)}
+                                                        disabled={!nextApp}
+                                                        className={cn(
+                                                            "transition-colors p-2 rounded-lg border",
+                                                            nextApp
+                                                                ? "text-indigo-600 hover:text-indigo-700 bg-indigo-50 border-indigo-100 hover:border-indigo-200"
+                                                                : "text-slate-300 bg-slate-50 border-slate-100 cursor-not-allowed"
+                                                        )}
+                                                        title={nextApp ? "Reschedule Appointment" : "No active appointment found"}
                                                     >
-                                                        <Trash size={18} />
+                                                        <Edit3 size={18} />
                                                     </button>
                                                 </div>
                                             </td>

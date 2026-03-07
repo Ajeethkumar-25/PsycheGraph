@@ -13,7 +13,11 @@ import {
     CheckCircle2,
     ShieldCheck,
     Plus,
-    Activity
+    Activity,
+    Phone,
+    Upload,
+    AlertCircle,
+    Image as ImageIcon
 } from 'lucide-react';
 import { login, loginHospital, clearError, registerHospital, logout } from '../store/slices/AllLoginSlice';
 import { useNavigate, Link } from 'react-router-dom';
@@ -39,7 +43,9 @@ export default function Auth() {
         email: '',
         full_name: '',
         password: '',
-        license_key: ''
+        license_key: '',
+        phone_number: '',
+        logo: null
     });
 
     useEffect(() => {
@@ -57,8 +63,15 @@ export default function Auth() {
 
     const handleRegister = async (e) => {
         e.preventDefault();
+        const data = new FormData();
+        Object.keys(registerData).forEach(key => {
+            if (registerData[key] !== null) {
+                data.append(key, registerData[key]);
+            }
+        });
+
         try {
-            await dispatch(registerHospital(registerData)).unwrap();
+            await dispatch(registerHospital(data)).unwrap();
             setSuccess(true);
             setTimeout(() => {
                 setSuccess(false);
@@ -227,9 +240,13 @@ export default function Auth() {
 
                                     <AnimatePresence>
                                         {error && (
-                                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="text-red-500 text-sm font-bold bg-red-50 p-3 rounded-xl flex items-center gap-3 border border-red-100">
-                                                <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
-                                                <span>{error}</span>
+                                            <motion.div
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                className="text-red-500 text-sm font-bold bg-red-50 p-3 rounded-xl flex items-center gap-3 border border-red-100"
+                                            >
+                                                <div className="w-1.5 h-1.5 bg-red-500 rounded-full shrink-0" />
+                                                <span>{typeof error === 'string' ? error : (error.msg || JSON.stringify(error))}</span>
                                             </motion.div>
                                         )}
                                     </AnimatePresence>
@@ -271,7 +288,7 @@ export default function Auth() {
                                 </div>
 
                                 <form onSubmit={handleRegister} className="space-y-4">
-                                    <div className="grid grid-cols-1 gap-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                                         <div className="space-y-1.5">
                                             <label className="text-sm font-bold text-slate-700 ml-1">Full Name</label>
                                             <div className="relative">
@@ -312,7 +329,7 @@ export default function Auth() {
                                                     required
                                                     value={registerData.license_key}
                                                     onChange={(e) => setRegisterData({ ...registerData, license_key: e.target.value })}
-                                                    className="w-full bg-[#f8fafc] border border-slate-100 rounded-xl py-3 pl-11 pr-5 text-[#0f172a] font-medium placeholder:text-slate-300 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all shadow-sm uppercase tracking-wider text-base"
+                                                    className="w-full bg-[#f8fafc] border border-slate-100 rounded-xl py-3 pl-11 pr-11 text-[#0f172a] font-medium placeholder:text-slate-300 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all shadow-sm uppercase tracking-wider text-base"
                                                     placeholder="XXXX-XXXX-XXXX"
                                                 />
                                                 <button
@@ -347,12 +364,61 @@ export default function Auth() {
                                                 </button>
                                             </div>
                                         </div>
+
+                                        <div className="space-y-1.5">
+                                            <label className="text-sm font-bold text-slate-700 ml-1">Phone Number</label>
+                                            <div className="relative">
+                                                <Phone className="absolute left-4.5 top-1/2 -translate-y-1/2 text-slate-400 w-4.5 h-4.5 z-20" />
+                                                <input
+                                                    type="tel"
+                                                    maxLength={10}
+                                                    value={registerData.phone_number}
+                                                    onChange={(e) => setRegisterData({ ...registerData, phone_number: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                                                    className="w-full bg-[#f8fafc] border border-slate-100 rounded-xl py-3 pl-11 pr-5 text-[#0f172a] font-medium placeholder:text-slate-300 focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all shadow-sm text-base"
+                                                    placeholder="9876543210"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-1.5">
+                                            <label className="text-sm font-bold text-slate-700 ml-1">Hospital Logo</label>
+                                            <div className="relative group">
+                                                <input
+                                                    type="file"
+                                                    id="register-logo"
+                                                    className="hidden"
+                                                    accept="image/*"
+                                                    onChange={(e) => setRegisterData({ ...registerData, logo: e.target.files[0] })}
+                                                />
+                                                <label
+                                                    htmlFor="register-logo"
+                                                    className="w-full flex items-center justify-between bg-[#f8fafc] border border-slate-100 rounded-xl py-3 px-11 cursor-pointer hover:bg-slate-50 transition-all shadow-sm"
+                                                >
+                                                    <div className="absolute left-4.5 top-1/2 -translate-y-1/2 text-slate-400">
+                                                        <Upload size={18} />
+                                                    </div>
+                                                    <span className="text-slate-400 text-base font-medium truncate">
+                                                        {registerData.logo ? registerData.logo.name : "Upload Logo"}
+                                                    </span>
+                                                    {registerData.logo && (
+                                                        <div className="shrink-0 ml-2">
+                                                            <ImageIcon size={18} className="text-blue-500" />
+                                                        </div>
+                                                    )}
+                                                </label>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <AnimatePresence>
                                         {error && (
-                                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="text-red-500 text-sm font-bold bg-red-50 p-3 rounded-xl border border-red-100">
-                                                {error}
+                                            <motion.div
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                className="text-red-500 text-sm font-bold bg-red-50 p-3 rounded-xl border border-red-100 flex items-start gap-3"
+                                            >
+                                                <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                                                <span>{typeof error === 'string' ? error : (error.msg || JSON.stringify(error))}</span>
                                             </motion.div>
                                         )}
                                     </AnimatePresence>

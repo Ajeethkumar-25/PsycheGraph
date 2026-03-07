@@ -34,17 +34,20 @@ export default function DoctorAppointments() {
     const [currentWeekStart, setCurrentWeekStart] = useState(() => {
         const today = new Date();
         const monday = new Date(today);
-        monday.setDate(monday.getDate() - monday.getDay() + 1); // Set to Monday of this week
+        // Correct logic: if today is Sunday (0), go back 6 days to Monday. Otherwise, go back day-1 days.
+        const diff = today.getDay() === 0 ? 6 : today.getDay() - 1;
+        monday.setDate(today.getDate() - diff);
+        monday.setHours(0, 0, 0, 0);
         return monday;
     });
 
     const getWeekDays = () => {
         const days = [];
-        for (let i = 0; i < 5; i++) { // Mon-Fri
+        for (let i = 0; i < 7; i++) { // Mon-Sun
             const d = new Date(currentWeekStart);
             d.setDate(currentWeekStart.getDate() + i);
             days.push({
-                name: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'][i],
+                name: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i],
                 date: d
             });
         }
@@ -83,10 +86,10 @@ export default function DoctorAppointments() {
         setCurrentWeekStart(next);
     };
 
-    
+
     const weekRangeString = () => {
         const end = new Date(currentWeekStart);
-        end.setDate(end.getDate() + 4); // Friday
+        end.setDate(end.getDate() + 6); // Sunday
         return `${currentWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
     };
 
@@ -129,6 +132,8 @@ export default function DoctorAppointments() {
             setIsSubmitting(false);
         }
     };
+    console.log("Doctor Selected:", formData.doctor_id)
+    console.log("Logged user:", user.id)
 
     const handleDelete = async (id) => {
         if (window.confirm("Are you sure you want to cancel this appointment?")) {
@@ -237,7 +242,7 @@ export default function DoctorAppointments() {
                                             Time
                                         </th>
                                         {getWeekDays().map(day => (
-                                            <th key={day.name} className="px-4 py-4 bg-slate-100/50 text-slate-500 text-xs font-semibold text-center border-r border-b border-slate-100 last:border-r-0">
+                                            <th key={day.name} className="px-4 py-4 bg-slate-100/50 text-slate-500 text-xs font-semibold text-center border-r border-b border-slate-100 last:border-r-0 w-[14.28%]">
                                                 {day.name}
                                                 <span className="font-normal text-slate-400 block mt-1">{day.date.getDate()}</span>
                                             </th>
@@ -253,7 +258,7 @@ export default function DoctorAppointments() {
                                             {getWeekDays().map(day => {
                                                 const app = getAppointmentForSlot(day.date, time);
                                                 return (
-                                                    <td key={`${day.name}-${time}`} className="px-2 py-3 border-r border-b border-slate-100 relative h-16 w-1/5 last:border-r-0">
+                                                    <td key={`${day.name}-${time}`} className="px-2 py-3 border-r border-b border-slate-100 relative h-16 w-[14.28%] last:border-r-0">
                                                         {app && (
                                                             <div className="absolute inset-x-2 top-2 bottom-2 bg-indigo-100 text-indigo-800 text-xs font-bold rounded-lg px-3 py-2 flex items-center shadow-sm cursor-pointer hover:bg-indigo-200 transition-colors truncate">
                                                                 {app.patient_name || app.patient?.full_name || 'Patient'}
@@ -278,8 +283,6 @@ export default function DoctorAppointments() {
                                             <th className="px-6 py-4 whitespace-nowrap">Time</th>
                                             <th className="px-6 py-4 whitespace-nowrap">Type</th>
                                             <th className="px-6 py-4 whitespace-nowrap">Status</th>
-                                            <th className="px-6 py-4 whitespace-nowrap">Reschedule</th>
-                                            <th className="px-6 py-4 whitespace-nowrap">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
@@ -305,12 +308,6 @@ export default function DoctorAppointments() {
                                                             }`}>
                                                             {app.status || 'Scheduled'}
                                                         </span>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <button onClick={() => openRescheduleModal(app)} className="text-slate-600 hover:text-primary-600 font-medium text-sm transition-colors">Reschedule</button>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <button onClick={() => handleDelete(app.id)} className="text-red-500 hover:text-red-700 font-medium text-sm transition-colors">Cancel</button>
                                                     </td>
                                                 </tr>
                                             ));

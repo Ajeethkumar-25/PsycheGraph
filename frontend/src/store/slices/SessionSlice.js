@@ -9,6 +9,14 @@ export const createSession = createAsyncThunk('sessions/create', async (formData
     }
 });
 
+export const createSoapNote = createAsyncThunk('sessions/createSoapNote', async (payload, { rejectWithValue }) => {
+    try {
+        return await SessionService.createSoapNote(payload);
+    } catch (error) {
+        return rejectWithValue(error.response?.data?.detail || error.response?.data?.message || 'Failed to save SOAP note');
+    }
+});
+
 export const fetchLanguages = createAsyncThunk('sessions/fetchLanguages', async (_, { rejectWithValue }) => {
     try {
         return await SessionService.fetchLanguages();
@@ -46,6 +54,14 @@ export const deleteSession = createAsyncThunk('sessions/delete', async (id, { re
         return await SessionService.deleteSession(id);
     } catch (error) {
         return rejectWithValue(error.response?.data?.detail || 'Failed to delete session');
+    }
+});
+
+export const fetchTranscript = createAsyncThunk('sessions/fetchTranscript', async (appointmentId, { rejectWithValue }) => {
+    try {
+        return await SessionService.fetchTranscript(appointmentId);
+    } catch (error) {
+        return rejectWithValue(error.response?.data?.detail || 'Failed to fetch transcript');
     }
 });
 
@@ -95,6 +111,12 @@ const sessionSlice = createSlice({
             .addCase(deleteSession.fulfilled, (state, action) => {
                 state.list = state.list.filter(s => s.id !== action.payload);
                 if (state.currentSession?.id === action.payload) state.currentSession = null;
+            })
+            .addCase(fetchTranscript.fulfilled, (state, action) => {
+                // If the transcript is for the current session, update it
+                if (state.currentSession) {
+                    state.currentSession.transcript = action.payload;
+                }
             });
     },
 });

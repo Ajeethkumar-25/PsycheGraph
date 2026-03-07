@@ -33,9 +33,9 @@ export const fetchUsers = createAsyncThunk('users/fetchAll', async (_, { rejectW
     }
 });
 
-export const fetchUserById = createAsyncThunk('users/fetchById', async ({ id, role }, { rejectWithValue }) => {
+export const fetchUserById = createAsyncThunk('users/fetchById', async ({ id }, { rejectWithValue }) => {
     try {
-        return await AllUserService.fetchUserById(id, role);
+        return await AllUserService.fetchUserById(id);
     } catch (error) {
         return rejectWithValue(error.response?.data?.detail || 'Failed to fetch user details');
     }

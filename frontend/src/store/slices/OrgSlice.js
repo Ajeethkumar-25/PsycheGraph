@@ -1,11 +1,23 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import OrgService from '../../services/OrgService';
 
+const formatError = (error) => {
+    const detail = error.response?.data?.detail;
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+        return detail.map(err => `${err.loc.join('.')}: ${err.msg}`).join(', ');
+    }
+    if (typeof detail === 'object' && detail !== null) {
+        return detail.msg || JSON.stringify(detail);
+    }
+    return error.response?.data?.message || error.message || 'An unexpected error occurred';
+};
+
 export const fetchOrganizations = createAsyncThunk('organizations/fetchAll', async (isPublic = false, { rejectWithValue }) => {
     try {
         return await OrgService.fetchOrganizations(isPublic);
     } catch (error) {
-        return rejectWithValue(error.response?.data?.detail || 'Failed to fetch organizations');
+        return rejectWithValue(formatError(error));
     }
 });
 
@@ -13,7 +25,7 @@ export const createOrganization = createAsyncThunk('organizations/create', async
     try {
         return await OrgService.createOrganization(orgData);
     } catch (error) {
-        return rejectWithValue(error.response?.data?.detail || 'Failed to create organization');
+        return rejectWithValue(formatError(error));
     }
 });
 
@@ -21,7 +33,7 @@ export const updateOrganization = createAsyncThunk('organizations/update', async
     try {
         return await OrgService.updateOrganization(id, data);
     } catch (error) {
-        return rejectWithValue(error.response?.data?.detail || 'Failed to update organization');
+        return rejectWithValue(formatError(error));
     }
 });
 
@@ -29,7 +41,42 @@ export const deleteOrganization = createAsyncThunk('organizations/delete', async
     try {
         return await OrgService.deleteOrganization(id);
     } catch (error) {
-        return rejectWithValue(error.response?.data?.detail || 'Failed to delete organization');
+        return rejectWithValue(formatError(error));
+    }
+});
+
+export const getWorkingHours = createAsyncThunk('organizations/getWorkingHours', async (org_id, { rejectWithValue }) => {
+    try {
+        return await OrgService.getWorkingHours(org_id);
+    } catch (error) {
+        if (error.response && error.response.status === 404) {
+            return []; // Return empty array if not set yet
+        }
+        return rejectWithValue(formatError(error));
+    }
+});
+
+export const setWorkingHours = createAsyncThunk('organizations/setWorkingHours', async ({ org_id, data }, { rejectWithValue }) => {
+    try {
+        return await OrgService.setWorkingHours(org_id, data);
+    } catch (error) {
+        return rejectWithValue(formatError(error));
+    }
+});
+
+export const fetchHospitalProfile = createAsyncThunk('organizations/fetchHospitalProfile', async (_, { rejectWithValue }) => {
+    try {
+        return await OrgService.getHospitalProfile();
+    } catch (error) {
+        return rejectWithValue(formatError(error));
+    }
+});
+
+export const updateHospitalProfile = createAsyncThunk('organizations/updateHospitalProfile', async (data, { rejectWithValue }) => {
+    try {
+        return await OrgService.updateHospitalProfile(data);
+    } catch (error) {
+        return rejectWithValue(formatError(error));
     }
 });
 
@@ -38,6 +85,7 @@ const orgSlice = createSlice({
     initialState: {
         list: [],
         currentOrg: null,
+        workingHours: null,
         loading: false,
         error: null,
     },
@@ -62,6 +110,42 @@ const orgSlice = createSlice({
             })
             .addCase(deleteOrganization.fulfilled, (state, action) => {
                 state.list = state.list.filter(o => o.id !== action.payload);
+            })
+            .addCase(getWorkingHours.pending, (state) => { state.loading = true; state.error = null; })
+            .addCase(getWorkingHours.fulfilled, (state, action) => {
+                state.loading = false;
+                state.workingHours = action.payload;
+            })
+            .addCase(getWorkingHours.rejected, (state, action) => {
+                state.loading = false;
+                state.error = action.payload;
+            })
+            .addCase(setWorkingHours.pending, (state) => { state.loading = true; state.error = null; })
+            .addCase(setWorkingHours.fulfilled, (state, action) => {
+                state.loading = false;
+                state.workingHours = action.payload;
+            })
+            .addCase(setWorkingHours.rejected, (state, action) => {
+                state.loading = false;
+                state.error = action.payload;
+            })
+            .addCase(fetchHospitalProfile.pending, (state) => { state.loading = true; state.error = null; })
+            .addCase(fetchHospitalProfile.fulfilled, (state, action) => {
+                state.loading = false;
+                state.currentOrg = action.payload;
+            })
+            .addCase(fetchHospitalProfile.rejected, (state, action) => {
+                state.loading = false;
+                state.error = action.payload;
+            })
+            .addCase(updateHospitalProfile.pending, (state) => { state.loading = true; state.error = null; })
+            .addCase(updateHospitalProfile.fulfilled, (state, action) => {
+                state.loading = false;
+                state.currentOrg = action.payload;
+            })
+            .addCase(updateHospitalProfile.rejected, (state, action) => {
+                state.loading = false;
+                state.error = action.payload;
             });
     }
 });

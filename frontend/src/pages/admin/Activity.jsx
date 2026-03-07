@@ -15,51 +15,93 @@ import {
 } from 'recharts';
 import { fetchAppointments } from '../../store/slices/AppointmentSlice';
 import { fetchUsers } from '../../store/slices/AllUserSlice';
+import { fetchSessions } from '../../store/slices/SessionSlice';
 
 export default function ActivityPage() {
     const dispatch = useDispatch();
     const { list: appointments, loading: appLoading } = useSelector((state) => state.appointments);
     const { list: users, loading: userLoading } = useSelector((state) => state.users);
+    const { list: sessions, loading: sessionLoading } = useSelector((state) => state.sessions);
 
     useEffect(() => {
         dispatch(fetchAppointments());
         dispatch(fetchUsers());
+        dispatch(fetchSessions());
     }, [dispatch]);
 
     // --- Derived Metrics ---
     const metrics = useMemo(() => {
         const completedSessions = appointments.filter(a => a.status?.toUpperCase() === 'COMPLETED').length;
-        const activeToday = Math.max(users.filter(u => u.is_active).length, 4); // Simulate active users if list is small
+        const totalNotes = sessions.length;
+        const activeToday = users.filter(u => u.is_active).length;
 
         return [
-            { label: 'Sessions Conducted', value: completedSessions.toLocaleString() || '158', sub: 'This month', icon: Activity, color: 'text-indigo-500', bg: 'bg-indigo-50' },
-            { label: 'Notes Created', value: (completedSessions * 1.2).toFixed(0), sub: '', icon: FileText, color: 'text-blue-500', bg: 'bg-blue-50' },
-            { label: 'Active Users Today', value: activeToday.toString(), sub: '', icon: Users, color: 'text-emerald-500', bg: 'bg-emerald-50' },
-            { label: 'Total Logins', value: (activeToday * 14).toString(), sub: 'This week', icon: LogIn, color: 'text-amber-500', bg: 'bg-amber-50' },
+            { label: 'Sessions Conducted', value: completedSessions.toLocaleString(), sub: 'Total Completed', icon: Activity, color: 'text-indigo-500', bg: 'bg-indigo-50' },
+            { label: 'Notes Created', value: totalNotes.toLocaleString(), sub: 'Documentation Output', icon: FileText, color: 'text-blue-500', bg: 'bg-blue-50' },
+            { label: 'Active Users', value: activeToday.toString(), sub: 'Currently Active', icon: Users, color: 'text-emerald-500', bg: 'bg-emerald-50' },
+            { label: 'Total Accounts', value: users.length.toString(), sub: 'Platform Users', icon: LogIn, color: 'text-amber-500', bg: 'bg-amber-50' },
         ];
-    }, [appointments, users]);
+    }, [appointments, users, sessions]);
 
-    // --- Chart Data: Login Frequency ---
-    const loginFrequencyData = [
-        { name: 'Mon', logins: 32 },
-        { name: 'Tue', logins: 28 },
-        { name: 'Wed', logins: 35 },
-        { name: 'Thu', logins: 30 },
-        { name: 'Fri', logins: 26 },
-        { name: 'Sat', logins: 12 },
-        { name: 'Sun', logins: 5 },
-    ];
+    // --- Chart Data: Login Frequency (Based on last_login of users) ---
+    const loginFrequencyData = useMemo(() => {
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const activityMap = days.reduce((acc, day) => ({ ...acc, [day]: 0 }), {});
+
+        // Get start of current week
+        const now = new Date();
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay());
+        startOfWeek.setHours(0, 0, 0, 0);
+
+        users.forEach(user => {
+            const role = user.role?.toUpperCase();
+            if (role !== 'DOCTOR' && role !== 'RECEPTIONIST') return;
+
+            const lastLogin = user.last_login || user.updated_at;
+            if (!lastLogin) return;
+
+            const loginDate = new Date(lastLogin);
+            if (isNaN(loginDate)) return;
+
+            // Count if last login was within this week
+            if (loginDate >= startOfWeek && loginDate <= now) {
+                const dayName = days[loginDate.getDay()];
+                activityMap[dayName]++;
+            }
+        });
+
+        const orderedDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        return orderedDays.map(day => ({
+            name: day,
+            logins: activityMap[day]
+        }));
+    }, [users]);
 
     // --- Feature Usage Breakdown ---
-    const featureUsage = [
-        { name: 'Appointments', count: 342, total: 400 },
-        { name: 'Notes Created', count: 186, total: 400 },
-        { name: 'Sessions', count: 158, total: 400 },
-        { name: 'Reports', count: 94, total: 400 },
-        { name: 'Settings', count: 45, total: 400 },
-    ];
+    const featureUsage = useMemo(() => {
+        const doctorsCount = users.filter(u => u.role?.toUpperCase() === 'DOCTOR').length;
+        const receptionistsCount = users.filter(u => u.role?.toUpperCase() === 'RECEPTIONIST').length;
+        const appointmentsCount = appointments.length;
+        const notesCount = sessions.length;
+        const sessionsCount = appointments.filter(a => a.status?.toUpperCase() === 'COMPLETED').length;
 
-    if (appLoading || userLoading) {
+        const data = [
+            { name: 'Doctors', count: doctorsCount },
+            { name: 'Receptionists', count: receptionistsCount },
+            { name: 'Appointments', count: appointmentsCount },
+            { name: 'Notes Created', count: notesCount },
+            { name: 'Sessions', count: sessionsCount },
+        ];
+
+        // Use a dynamic total for the progress bar (max count + 25%)
+        const maxCount = Math.max(...data.map(d => d.count), 1);
+        const dynamicTotal = Math.ceil(maxCount * 1.25);
+
+        return data.map(item => ({ ...item, total: dynamicTotal }));
+    }, [users, appointments, sessions]);
+
+    if (appLoading || userLoading || sessionLoading) {
         return (
             <div className="flex h-[60vh] items-center justify-center">
                 <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}>

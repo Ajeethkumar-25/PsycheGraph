@@ -29,47 +29,156 @@ export default function Analytics() {
     // --- Derived Metrics ---
     const stats = useMemo(() => {
         const total = appointments.length;
-        const doctors = users.filter(u => u.role?.toUpperCase() === 'DOCTOR');
-
-        // Calculate Cancellation Rate
         const cancelledCount = appointments.filter(a => a.status?.toUpperCase() === 'CANCELLED').length;
-        const cancelRate = total > 0 ? ((cancelledCount / total) * 100).toFixed(1) : "0.0";
+        const completedCount = appointments.filter(a => a.status?.toUpperCase() === 'COMPLETED').length;
 
-        // Mock data for trends and utilization for now, blending with real total
+        // --- Calculate Weekly Patient Traffic ---
+        const now = new Date();
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay());
+        startOfWeek.setHours(0, 0, 0, 0);
+
+        const weeklyCount = appointments.filter(app => {
+            if (!app.start_time) return false;
+            const appDate = new Date(app.start_time);
+            return !isNaN(appDate) && appDate >= startOfWeek && appDate <= now;
+        }).length;
+
+        // --- Calculate Growth Comparisons (for Total Appointments) ---
+        const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const lastMonthKey = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, '0')}`;
+
+        let thisMonthApps = 0;
+        let lastMonthApps = 0;
+
+        appointments.forEach(app => {
+            if (!app.start_time) return;
+            const d = new Date(app.start_time);
+            if (isNaN(d)) return;
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            if (key === thisMonthKey) thisMonthApps++;
+            else if (key === lastMonthKey) lastMonthApps++;
+        });
+
+        const appChange = lastMonthApps > 0
+            ? ((thisMonthApps - lastMonthApps) / lastMonthApps * 100).toFixed(1)
+            : thisMonthApps > 0 ? "100" : "0";
+
         return [
-            { label: 'Total Appointments', value: total.toLocaleString(), change: '+12% vs last period', icon: Calendar, color: 'text-indigo-500', bg: 'bg-indigo-50' },
-            { label: 'Avg. Daily', value: Math.round(total / 30) || '0', change: null, icon: BarChart3, color: 'text-blue-500', bg: 'bg-blue-50' },
-            { label: 'Cancellation Rate', value: `${cancelRate}%`, change: '-1.4%', icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-50' },
-            { label: 'Avg. Utilization', value: '77%', change: null, icon: Users, color: 'text-amber-500', bg: 'bg-amber-50' },
+            {
+                label: 'Total Appointments',
+                value: total.toLocaleString(),
+                change: appChange !== "0" ? `${appChange >= 0 ? '+' : ''}${appChange}% vs last month` : 'No change vs last month',
+                icon: Calendar,
+                color: 'text-indigo-500',
+                bg: 'bg-indigo-50'
+            },
+            {
+                label: 'Weekly Patient',
+                value: weeklyCount.toLocaleString(),
+                change: 'Current week',
+                icon: BarChart3,
+                color: 'text-blue-500',
+                bg: 'bg-blue-50'
+            },
+            {
+                label: 'Cancellations',
+                value: cancelledCount.toLocaleString(),
+                change: 'Total absolute count',
+                icon: TrendingDown,
+                color: 'text-rose-500',
+                bg: 'bg-rose-50'
+            },
+            {
+                label: 'Completed',
+                value: completedCount.toLocaleString(),
+                change: 'Total absolute count',
+                icon: Activity,
+                color: 'text-emerald-500',
+                bg: 'bg-emerald-50'
+            },
         ];
-    }, [appointments, users]);
+    }, [appointments]);
 
     // --- Chart Data ---
-    const monthlyData = [
-        { name: 'Jan', appointments: 240, cancellations: 24 },
-        { name: 'Feb', appointments: 280, cancellations: 18 },
-        { name: 'Mar', appointments: 310, cancellations: 26 },
-        { name: 'Apr', appointments: 290, cancellations: 22 },
-        { name: 'May', appointments: 340, cancellations: 30 },
-        { name: 'Jun', appointments: 360, cancellations: 20 },
-    ];
+    const monthlyData = useMemo(() => {
+        // Build last 4 months list
+        const months = Array.from({ length: 4 }, (_, i) => {
+            const d = new Date();
+            d.setMonth(d.getMonth() - (3 - i));
+            return {
+                key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+                name: d.toLocaleString('default', { month: 'short' })
+            };
+        });
 
-    const doctorUtilization = useMemo(() => {
-        const docs = users.filter(u => u.role?.toUpperCase() === 'DOCTOR').slice(0, 5);
-        if (docs.length === 0) {
-            return [
-                { name: 'Dr. Chen', rate: 92 },
-                { name: 'Dr. Park', rate: 85 },
-                { name: 'Dr. Rodriguez', rate: 78 },
-                { name: 'Dr. Wilson', rate: 45 },
-                { name: 'Dr. Kim', rate: 88 },
-            ];
-        }
-        return docs.map(d => ({
-            name: `Dr. ${d.full_name?.split(' ')[0] || d.id}`,
-            rate: Math.floor(Math.random() * (95 - 40 + 1)) + 40
-        })).sort((a, b) => b.rate - a.rate);
-    }, [users]);
+        const appsMap = {};
+        const cancelsMap = {};
+        const completedMap = {};
+        months.forEach(({ key }) => {
+            appsMap[key] = 0;
+            cancelsMap[key] = 0;
+            completedMap[key] = 0;
+        });
+
+        // Populate from real appointments
+        appointments.forEach(app => {
+            if (!app.start_time) return;
+            const d = new Date(app.start_time);
+            if (isNaN(d)) return;
+
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            if (appsMap[key] !== undefined) {
+                const status = app.status?.toUpperCase() || 'UNKNOWN';
+                if (status === 'CANCELLED') {
+                    cancelsMap[key]++;
+                } else if (status === 'COMPLETED') {
+                    completedMap[key]++;
+                    appsMap[key]++;
+                } else if (status === 'SCHEDULED') {
+                    appsMap[key]++;
+                }
+            }
+        });
+
+        return months.map(({ key, name }) => ({
+            name,
+            appointments: appsMap[key],
+            cancellations: cancelsMap[key],
+            completed: completedMap[key]
+        }));
+    }, [appointments]);
+
+    const weeklyTrafficData = useMemo(() => {
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const trafficMap = days.reduce((acc, day) => ({ ...acc, [day]: 0 }), {});
+
+        // Get the start of the current week (Sunday)
+        const now = new Date();
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay());
+        startOfWeek.setHours(0, 0, 0, 0);
+
+        appointments.forEach(app => {
+            if (!app.start_time) return;
+            const appDate = new Date(app.start_time);
+            if (isNaN(appDate)) return;
+
+            // Check if appointment is within the current week
+            if (appDate >= startOfWeek && appDate <= now) {
+                const dayName = days[appDate.getDay()];
+                trafficMap[dayName]++;
+            }
+        });
+
+        // Return in Mon-Sun order as requested by standard UI patterns
+        const orderedDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        return orderedDays.map(day => ({
+            name: day,
+            patients: trafficMap[day]
+        }));
+    }, [appointments]);
 
     if (appLoading || userLoading) {
         return (
@@ -116,7 +225,7 @@ export default function Analytics() {
                     </motion.div>
                 ))}
             </div>
-            
+
 
             {/* Charts Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-6">
@@ -173,36 +282,39 @@ export default function Analytics() {
                     </div>
                 </motion.div>
 
-                {/* Doctor Utilization Bar Chart */}
+                {/* Weekly Patient Traffic Bar Chart */}
                 <motion.div
                     initial={{ opacity: 0, scale: 0.98 }}
                     animate={{ opacity: 1, scale: 1 }}
                     className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm flex flex-col h-[380px]"
                 >
-                    <h3 className="text-[13px] font-bold text-slate-800 mb-6 px-1">Doctor Utilization Rate</h3>
+                    <h3 className="text-[13px] font-bold text-slate-800 mb-6 px-1">Weekly Patient Traffic</h3>
                     <div className="flex-1 w-full min-h-[300px]">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart
-                                layout="vertical"
-                                data={doctorUtilization}
-                                margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
+                                data={weeklyTrafficData}
+                                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                             >
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                                <XAxis type="number" hide />
-                                <YAxis
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis
                                     dataKey="name"
-                                    type="category"
                                     axisLine={false}
                                     tickLine={false}
-                                    style={{ fontSize: '11px', fontWeight: 'bold', fill: '#64748b' }}
+                                    tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 600 }}
+                                    dy={10}
+                                />
+                                <YAxis
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 600 }}
                                 />
                                 <Tooltip
-                                    cursor={{ fill: 'transparent' }}
+                                    cursor={{ fill: '#f8fafc', radius: 8 }}
                                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                                 />
-                                <Bar dataKey="rate" radius={[0, 4, 4, 0]} barSize={24}>
-                                    {doctorUtilization.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill="#6366f1" />
+                                <Bar dataKey="patients" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={40}>
+                                    {weeklyTrafficData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill="#6366f1" className="hover:opacity-80 transition-opacity" />
                                     ))}
                                 </Bar>
                             </BarChart>
@@ -210,6 +322,93 @@ export default function Analytics() {
                     </div>
                 </motion.div>
 
+            </div>
+
+            {/* Monthly Trends Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-6">
+                {/* Monthly Cancellations Bar Chart */}
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm flex flex-col h-[380px]"
+                >
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="p-2 bg-rose-50 rounded-lg text-rose-500">
+                            <TrendingDown size={18} />
+                        </div>
+                        <h3 className="text-[13px] font-bold text-slate-800">Monthly Cancellations (Last 4 Months)</h3>
+                    </div>
+                    <div className="flex-1 w-full min-h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis
+                                    dataKey="name"
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 600 }}
+                                    dy={10}
+                                />
+                                <YAxis
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 600 }}
+                                />
+                                <Tooltip
+                                    cursor={{ fill: '#fff1f2', radius: 8 }}
+                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                />
+                                <Bar dataKey="cancellations" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={40}>
+                                    {monthlyData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill="#f43f5e" />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </motion.div>
+
+                {/* Monthly Completed Bar Chart */}
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm flex flex-col h-[380px]"
+                >
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="p-2 bg-emerald-50 rounded-lg text-emerald-500">
+                            <Activity size={18} />
+                        </div>
+                        <h3 className="text-[13px] font-bold text-slate-800">Monthly Completed (Last 4 Months)</h3>
+                    </div>
+                    <div className="flex-1 w-full min-h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis
+                                    dataKey="name"
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 600 }}
+                                    dy={10}
+                                />
+                                <YAxis
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 600 }}
+                                />
+                                <Tooltip
+                                    cursor={{ fill: '#f0fdf4', radius: 8 }}
+                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                />
+                                <Bar dataKey="completed" fill="#10b981" radius={[4, 4, 0, 0]} barSize={40}>
+                                    {monthlyData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill="#10b981" />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </motion.div>
             </div>
         </div>
     );

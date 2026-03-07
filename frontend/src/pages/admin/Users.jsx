@@ -91,7 +91,7 @@ export default function AdminUsers() {
 
             // Normalize doctor_ids to be an array of integers from multiple possible sources
             let normalizedDoctorIds = [];
-            const rawIds = user.assigned_doctor_user_ids || user.doctor_ids || user.assigned_doctor_ids;
+            const rawIds = user.assigned_doctors || user.assigned_doctor_user_ids || user.doctor_ids || user.assigned_doctor_ids;
 
             if (Array.isArray(rawIds)) {
                 normalizedDoctorIds = rawIds.map(d =>
@@ -179,6 +179,16 @@ export default function AdminUsers() {
         if (!result.error) {
             dispatch(fetchUsers());
             handleCloseModal();
+        }
+    };
+
+    const handleDelete = async (id, role) => {
+        if (window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
+            const result = await dispatch(deleteUser({ id, role }));
+            if (!result.error) {
+                showToast('User deleted successfully');
+                dispatch(fetchUsers());
+            }
         }
     };
 
@@ -316,7 +326,7 @@ export default function AdminUsers() {
                                 <th className="px-6 py-4 text-[13px] font-semibold text-slate-500 w-[20%]">Role</th>
                                 <th className="px-6 py-4 text-[13px] font-semibold text-slate-500 w-[15%]">Status</th>
                                 <th className="px-6 py-4 text-[13px] font-semibold text-slate-500 w-[15%]">Last Login</th>
-                                <th className="px-6 py-4 text-[13px] font-semibold text-slate-500 w-[10%] text-center"></th>
+                                <th className="px-6 py-4 text-[13px] font-semibold text-slate-500 w-[10%] text-center">Action</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
@@ -387,12 +397,13 @@ export default function AdminUsers() {
                                                     type="button"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        handleOpenModal(user);
+                                                        handleDelete(user.id, user.role);
                                                     }}
-                                                    className="p-1.5 text-slate-400 hover:text-slate-600 transition-all font-bold"
-                                                    title="Actions"
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-600 rounded-lg transition-all font-bold text-[11px] mx-auto shadow-sm border border-red-100/50"
+                                                    title="Delete User"
                                                 >
-                                                    <MoreHorizontal size={18} />
+                                                    <Trash2 size={14} />
+                                                    <span>Delete</span>
                                                 </button>
                                             </td>
                                         </motion.tr>
@@ -474,15 +485,6 @@ export default function AdminUsers() {
                             <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto custom-scrollbar">
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                     <div className="col-span-2 flex justify-end">
-                                        {editingUser && (
-                                            <button
-                                                type="button"
-                                                onClick={() => handleDelete(editingUser.id, editingUser.role)}
-                                                className="text-xs font-bold text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
-                                            >
-                                                <Trash2 size={14} /> Delete User
-                                            </button>
-                                        )}
                                     </div>
                                     <div className="col-span-2">
                                         <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Full Name</label>
@@ -623,5 +625,5 @@ export default function AdminUsers() {
             </AnimatePresence>
         </div>
     );
-    
+
 }

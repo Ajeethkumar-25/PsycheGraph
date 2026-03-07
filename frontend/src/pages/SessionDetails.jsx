@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { updateSession, fetchSessions } from '../store/slices/SessionSlice';
 import { fetchPatients } from '../store/slices/PatientSlice';
+import { fetchAppointments } from '../store/slices/AppointmentSlice';
 import { FileAudio, ClipboardList, Save, ArrowLeft, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function SessionDetails() {
@@ -11,8 +12,11 @@ export default function SessionDetails() {
     const dispatch = useDispatch();
     const { list: sessions, loading: sessionsLoading } = useSelector((state) => state.sessions);
     const { list: patients, loading: patientsLoading } = useSelector((state) => state.patients);
+    const { list: appointments } = useSelector((state) => state.appointments);
+
     const session = sessions.find(s => s.id === parseInt(id));
     const patient = session ? patients.find(p => p.id === session.patient_id) : null;
+    const appointment = session?.appointment_id ? appointments.find(a => String(a.id) === String(session.appointment_id)) : null;
 
     const [soapNote, setSoapNote] = useState('');
     const [isSaving, setIsSaving] = useState(false);
@@ -25,10 +29,13 @@ export default function SessionDetails() {
         if (!patients.length) {
             dispatch(fetchPatients());
         }
+        if (!appointments.length) {
+            dispatch(fetchAppointments());
+        }
         if (session) {
             setSoapNote(session.soap_note || '');
         }
-    }, [dispatch, session, sessions.length, patients.length]);
+    }, [dispatch, session, sessions.length, patients.length, appointments.length]);
 
     const handleSave = async () => {
         setIsSaving(true);
@@ -118,7 +125,11 @@ export default function SessionDetails() {
                             <div className="flex justify-between py-2 border-b border-slate-50">
                                 <span className="text-slate-500">Time</span>
                                 <span className="text-slate-900 font-semibold">
-                                    {new Date(session.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    {appointment?.start_time
+                                        ? new Date(appointment.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                        : session?.date
+                                            ? new Date(session.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                            : '--:--'}
                                 </span>
                             </div>
                             <div className="flex justify-between py-2 border-b border-slate-50">
@@ -132,7 +143,7 @@ export default function SessionDetails() {
                             <audio
                                 controls
                                 className="w-full h-12"
-                                src={`http://65.1.249.160/${session.audio_url}`}
+                                src={`/api/${session.audio_url}`}
                             >
                                 Your browser does not support the audio element.
                             </audio>

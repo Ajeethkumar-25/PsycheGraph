@@ -14,7 +14,7 @@ import AdminUsers from './pages/admin/Users';
 import AdminAppointments from './pages/admin/Apponitments';
 import Roles from './pages/admin/Roles';
 import ClinicSettings from './pages/admin/ClinicSettings';
-import WorkingHours from './pages/admin/WorkingHours';
+import WorkingHours from './pages/admin/WorkingHours/WorkingHours';
 import Analytics from './pages/admin/Analytics';
 import ActivityPage from './pages/admin/Activity';
 import Branding from './pages/admin/Branding';
@@ -24,6 +24,7 @@ import AdminSettings from './pages/admin/Settings';
 import ReceptionistDashboard from './pages/receptionist/Dashboard';
 import ReceptionistPatients from './pages/receptionist/Patients';
 import ReceptionistAppointments from './pages/receptionist/Appointments';
+import ReceptionistCalendar from './pages/receptionist/Calendar';
 import DoctorDashboard from './pages/doctor/Dashboard';
 import DoctorPatients from './pages/doctor/Patients';
 import DoctorAppointments from './pages/doctor/Appointments';
@@ -33,6 +34,7 @@ import Layout from './layouts/Layout';
 import Login from './commenlogin/Login';
 import SoapNotes from './pages/doctor/SoapNotes';
 import LongitudinalTrends from './pages/doctor/LongitudinalTrends';
+import DoctorTranscript from './pages/doctor/Transcript';
 
 
 function App() {
@@ -71,7 +73,9 @@ function App() {
                 <Route element={token ? <Layout /> : <Navigate to="/" />}>
                     {/* Common Routes - protected by backend mainly but UI should also guard */}
                     <Route path="/patients" element={<Patients />} />
-                    <Route path="/sessions" element={<Sessions />} />
+                    <Route path="/sessions" element={
+                        (user?.role || user?.user?.role)?.toUpperCase() === 'DOCTOR' ? <DoctorTranscript /> : <Sessions />
+                    } />
                     <Route path="/sessions/:id" element={<SessionDetails />} />
 
                     {/* Super Admin Routes */}
@@ -139,6 +143,9 @@ function App() {
                     <Route path="/receptionist/appointments" element={
                         (user?.role || user?.user?.role)?.toUpperCase() === 'RECEPTIONIST' ? <ReceptionistAppointments /> : <Navigate to="/" />
                     } />
+                    <Route path="/receptionist/calendar" element={
+                        (user?.role || user?.user?.role)?.toUpperCase() === 'RECEPTIONIST' ? <ReceptionistCalendar /> : <Navigate to="/" />
+                    } />
 
                     {/* Doctor Routes */}
                     <Route path="/doctor" element={
@@ -149,6 +156,9 @@ function App() {
                     } />
                     <Route path="/doctor/schedule" element={
                         (user?.role || user?.user?.role)?.toUpperCase() === 'DOCTOR' ? <DoctorAppointments /> : <Navigate to="/" />
+                    } />
+                    <Route path="/doctor/session/:appointmentId/:patientId" element={
+                        (user?.role || user?.user?.role)?.toUpperCase() === 'DOCTOR' ? <DoctorSessionMode /> : <Navigate to="/" />
                     } />
                     <Route path="/doctor/session/:patientId" element={
                         (user?.role || user?.user?.role)?.toUpperCase() === 'DOCTOR' ? <DoctorSessionMode /> : <Navigate to="/" />

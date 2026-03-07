@@ -2,19 +2,31 @@ import { useEffect, useState, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchPatients, createPatient, updatePatient, deletePatient } from '../../store/slices/PatientSlice';
 import { fetchDoctors } from '../../store/slices/AllUserSlice';
+import { fetchAppointments } from '../../store/slices/AppointmentSlice';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, UserPlus, Users, X, Phone, Mail, Calendar, Loader2, User, ArrowUpRight, MapPin, Activity, Stethoscope, Edit3, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, UserPlus, Users, X, Phone, Mail, Calendar, Loader2, User, ArrowUpRight, MapPin, Activity, Stethoscope, Edit3, Trash2, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
+import { clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs) {
+    return twMerge(clsx(inputs));
+}
 
 export default function ReceptionistPatients() {
     const dispatch = useDispatch();
     const { user: currentUser } = useSelector((state) => state.auth);
     const { list: patients, loading: patientsLoading } = useSelector((state) => state.patients);
     const { list: allUsers, loading: usersLoading } = useSelector((state) => state.users);
+    const { list: appointments } = useSelector((state) => state.appointments);
 
-    // Robust doctor ID and name extraction from currentUser (handles nested user object and various possible field names)
+    const [filterStatus, setFilterStatus] = useState('All');
+    const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+    const [selectedPatientProfile, setSelectedPatientProfile] = useState(null);
+
+    // Robust doctor ID and name extraction from currentUser
     const assignedDoctorId = currentUser?.doctor_id || currentUser?.user?.doctor_id ||
         currentUser?.doctor?.id || currentUser?.assigned_doctor_id ||
-        currentUser?.details?.doctor_id;
+        currentUser?.details?.doctor_id || currentUser?.user_id;
 
     const assignedDoctorName = currentUser?.doctor_name || currentUser?.user?.doctor_name ||
         currentUser?.doctor?.name || currentUser?.doctor?.full_name ||
@@ -26,26 +38,18 @@ export default function ReceptionistPatients() {
 
     // Search for doctor name in general users list if not in user profile
     const resolvedDoctorName = assignedDoctorName ||
-        allUsers.find(u => String(u.id) === String(assignedDoctorId))?.full_name ||
-        allUsers.find(u => String(u.id) === String(assignedDoctorId))?.name ||
+        allUsers.find(u => String(u.user_id || u.id) === String(assignedDoctorId))?.full_name ||
+        allUsers.find(u => String(u.user_id || u.id) === String(assignedDoctorId))?.name ||
         (assignedDoctorId ? `Doctor #${assignedDoctorId.toString().slice(-4)}` : "Assigned Doctor");
 
-    // Fallback: If doctors list is empty (due to restricted admin endpoint), 
-    // we use a synthetic list containing at least the assigned doctor for selection.
-    const displayDoctors = useMemo(() => {
-        const doctorsList = allUsers.filter(u => u.role === 'DOCTOR');
-        const list = [...doctorsList];
+    // Fetch details on mount
+    useEffect(() => {
+        dispatch(fetchPatients());
+        dispatch(fetchAppointments());
+        dispatch(fetchDoctors()); // Ensure doctors are specifically fetched
+    }, [dispatch]);
 
-        if (assignedDoctorId && !list.some(d => String(d.id) === String(assignedDoctorId))) {
-            list.push({
-                id: assignedDoctorId,
-                full_name: resolvedDoctorName,
-                role: 'DOCTOR',
-                metadata: assignedDoctorMeta
-            });
-        }
-        return list;
-    }, [allUsers, assignedDoctorId, resolvedDoctorName, assignedDoctorMeta]);
+
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
@@ -59,29 +63,34 @@ export default function ReceptionistPatients() {
         date_of_birth: '',
         gender: '',
         address: '',
-        doctor_id: '',
         organization_id: currentUser?.organization_id || 1,
-        patient_age: ''
+        age: ''
     });
+
+    // Auto-select removed per user request to prevent accidental assignments
+    // useEffect(() => {
+    //     if (isModalOpen && !isEditMode && displayDoctors.length > 0 && !formData.doctor_id) {
+    //         setFormData(prev => ({ ...prev, doctor_id: displayDoctors[0].id }));
+    //     }
+    // }, [displayDoctors, isModalOpen, isEditMode, formData.doctor_id]);
 
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 6;
 
-    useEffect(() => {
-        dispatch(fetchPatients());
-        dispatch(fetchDoctors());
-    }, [dispatch]);
+
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsSubmitting(true);
         try {
-            const { organization_id, ...dataToSubmit } = formData;
             const patientPayload = {
-                ...dataToSubmit,
+                full_name: formData.full_name,
+                email: formData.email,
+                contact_number: formData.contact_number,
+                gender: formData.gender,
+                address: formData.address,
                 date_of_birth: formData.date_of_birth ? new Date(formData.date_of_birth).toISOString().split('T')[0] : null,
-                doctor_id: formData.doctor_id ? parseInt(formData.doctor_id) : null,
-                patient_age: formData.patient_age ? parseInt(formData.patient_age, 10) : null
+                age: formData.age ? Number(formData.age) : 0
             };
 
             if (isEditMode) {
@@ -112,9 +121,8 @@ export default function ReceptionistPatients() {
             date_of_birth: '',
             gender: '',
             address: '',
-            doctor_id: '',
             organization_id: currentUser?.organization_id || 1,
-            patient_age: ''
+            age: ''
         });
         setIsEditMode(false);
         setEditingPatientId(null);
@@ -130,9 +138,8 @@ export default function ReceptionistPatients() {
             date_of_birth: patient.date_of_birth ? new Date(patient.date_of_birth).toISOString().split('T')[0] : '',
             gender: patient.gender || '',
             address: patient.address || '',
-            doctor_id: patient.doctor_id || '',
             organization_id: patient.organization_id || currentUser?.organization_id || 1,
-            patient_age: patient.patient_age || ''
+            age: patient.age || ''
         });
         setIsModalOpen(true);
     };
@@ -149,16 +156,24 @@ export default function ReceptionistPatients() {
         }
     };
 
-    const filteredPatients = patients.filter(p =>
-        p.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.contact_number?.includes(searchQuery)
-    );
+    const filteredPatients = useMemo(() => {
+        return patients.filter(p => {
+            const matchesSearch = p.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                p.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                p.contact_number?.includes(searchQuery);
 
-    // Reset pagination when search query changes
+            const matchesStatus = filterStatus === 'All' ? true :
+                filterStatus === 'Active' ? true : // For now, treat all as active unless we have a 'status' field
+                    false; // 'Inactive' would be false for now
+
+            return matchesSearch && matchesStatus;
+        });
+    }, [patients, searchQuery, filterStatus]);
+
+    // Reset pagination when filter or search query changes
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchQuery]);
+    }, [searchQuery, filterStatus]);
 
     return (
         <div className="space-y-6">
@@ -166,45 +181,56 @@ export default function ReceptionistPatients() {
             <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col sm:flex-row sm:items-end justify-between gap-4"
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
             >
                 <div>
-                    <p className="text-sm font-semibold text-indigo-600 mb-1">Patient Management</p>
-                    <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Patient Registry</h2>
-                    <p className="text-slate-500 mt-1">Manage patient demographics and onboarding</p>
+                    <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Patients</h2>
+                    <p className="text-slate-500 mt-1">Manage patient records and registrations.</p>
                 </div>
                 <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => setIsModalOpen(true)}
-                    className="flex items-center justify-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/25 w-full sm:w-auto"
+                    onClick={() => { resetForm(); setIsModalOpen(true); }}
+                    className="flex items-center justify-center gap-2 bg-indigo-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-[#1b8a77] transition-all shadow-lg shadow-[#21a18c]/20 w-full sm:w-auto"
                 >
-                    <UserPlus size={16} />
-                    <span>{isEditMode ? 'Edit Patient' : 'Register New Patient'}</span>
+                    <UserPlus size={18} />
+                    <span>Add Patient</span>
                 </motion.button>
             </motion.div>
 
-            {/* Search and Stats Bar */}
+            {/* Search and Filter Bar */}
             <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
-                className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center"
+                className="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between"
             >
-                <div className="relative flex-1">
-                    
+                <div className="relative max-w-md w-full">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input
                         type="text"
-                        placeholder="Search by name, email, or phone..."
+                        placeholder="Search patients..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-xl py-3 pl-11 pr-4 text-slate-900 font-medium placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                        className="w-full bg-[#f8fafc] border border-slate-200 rounded-xl py-3 pl-11 pr-4 text-slate-900 font-medium placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#21a18c]/20 focus:border-[#21a18c] transition-all"
                     />
                 </div>
-                <div className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50 rounded-xl border border-indigo-100">
-                    <Users size={16} className="text-indigo-600" />
-                    <span className="text-sm font-semibold text-indigo-700">{(patients?.length || 0)} patients</span>
+
+                <div className="flex items-center gap-2 p-1 bg-white border border-slate-100 rounded-xl shadow-sm">
+                    {['All', 'Active', 'Inactive'].map((tab) => (
+                        <button
+                            key={tab}
+                            onClick={() => setFilterStatus(tab)}
+                            className={cn(
+                                "px-6 py-2 text-sm font-bold rounded-lg transition-all",
+                                filterStatus === tab
+                                    ? "bg-indigo-500 text-white shadow-sm"
+                                    : "text-slate-500 hover:text-slate-700"
+                            )}
+                        >
+                            {tab}
+                        </button>
+                    ))}
                 </div>
             </motion.div>
 
@@ -217,13 +243,14 @@ export default function ReceptionistPatients() {
             >
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
-                        <thead className="bg-slate-50/80">
+                        <thead className="bg-[#f8fafc]">
                             <tr className="border-b border-slate-100">
-                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Patient</th>
-                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Contact</th>
-                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Birth Date</th>
-                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
-                                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Actions</th>
+                                <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Name</th>
+                                <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Phone</th>
+                                <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Email</th>
+                                <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Last Appt</th>
+                                <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Status</th>
+                                <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
@@ -232,63 +259,69 @@ export default function ReceptionistPatients() {
                                 const indexOfFirstItem = indexOfLastItem - itemsPerPage;
                                 const currentItems = filteredPatients.slice(indexOfFirstItem, indexOfLastItem);
 
-                                return currentItems.map((patient, index) => (
-                                    <motion.tr
-                                        key={patient.id}
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        transition={{ delay: index * 0.03 }}
-                                        className="hover:bg-slate-50/50 transition-colors group cursor-default"
-                                    >
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-100 to-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-sm shrink-0">
-                                                    {patient.full_name?.[0]?.toUpperCase()}
-                                                </div>
-                                                <div>
-                                                    <p className="font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">{patient.full_name}</p>
-                                                    <p className="text-xs text-slate-400">{patient.email}</p>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className="text-sm text-slate-600 flex items-center gap-1.5">
-                                                <Phone size={12} className="text-slate-400" />
-                                                {patient.contact_number}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className="text-sm text-slate-600 flex items-center gap-1.5">
-                                                <Calendar size={12} className="text-slate-400" />
-                                                {new Date(patient.date_of_birth).toLocaleDateString()}
-                                            </span>
-                                        </td>
+                                return currentItems.map((patient, index) => {
+                                    const patientAppointments = appointments.filter(a => String(a.patient_id) === String(patient.id));
+                                    const lastAppt = patientAppointments.sort((a, b) => new Date(b.start_time) - new Date(a.start_time))[0];
 
-                                        <td className="px-6 py-4">
-                                            <span className="px-2.5 py-1 bg-emerald-50 text-emerald-600 text-xs font-semibold rounded-lg">
-                                                Active
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <button
-                                                    onClick={() => handleEditClick(patient)}
-                                                    className="p-1.5 hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 rounded-lg transition-colors"
-                                                    title="Edit Patient"
-                                                >
-                                                    <Edit3 size={16} />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDeleteClick(patient.id)}
-                                                    className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
-                                                    title="Delete Patient"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </motion.tr>
-                                ));
+                                    return (
+                                        <motion.tr
+                                            key={patient.id}
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            transition={{ delay: index * 0.03 }}
+                                            className="hover:bg-slate-50/50 transition-colors group cursor-default"
+                                        >
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-bold text-slate-900">{patient.full_name}</p>
+                                                    <span className="text-[10px] text-slate-400 font-medium bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">ID: {patient.id}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <p className="text-sm text-slate-500 font-medium">{patient.contact_number}</p>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <p className="text-sm text-slate-500 font-medium">{patient.email}</p>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <p className="text-sm text-slate-500 font-medium">
+                                                    {lastAppt ? new Date(lastAppt.start_time).toISOString().split('T')[0] : 'No record'}
+                                                </p>
+                                            </td>
+
+                                            <td className="px-6 py-4">
+                                                <span className="px-2.5 py-1 bg-emerald-100 text-[#21a18c] text-[11px] font-bold rounded-lg uppercase tracking-wider">
+                                                    Active
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="flex items-center justify-end gap-3">
+                                                    <button
+                                                        onClick={() => handleEditClick(patient)}
+                                                        className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg transition-colors"
+                                                        title="Edit Patient"
+                                                    >
+                                                        <Edit3 size={18} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => { setSelectedPatientProfile(patient); setIsProfileModalOpen(true); }}
+                                                        className="p-1.5 text-slate-400 hover:text-[#21a18c] rounded-lg transition-colors"
+                                                        title="View Profile"
+                                                    >
+                                                        <Eye size={18} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => { /* Navigate or open booking modal */ }}
+                                                        className="p-1.5 text-slate-400 hover:text-[#21a18c] rounded-lg transition-colors"
+                                                        title="Schedule Appointment"
+                                                    >
+                                                        <Calendar size={18} />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </motion.tr>
+                                    );
+                                });
                             })()}
                         </tbody>
                     </table>
@@ -445,10 +478,10 @@ export default function ReceptionistPatients() {
                                             <input
                                                 required
                                                 type="tel"
-                                                value={formData.patient_age}
+                                                value={formData.age}
                                                 onChange={(e) => {
                                                     const value = e.target.value.replace(/[^0-9]/g, '');
-                                                    setFormData({ ...formData, patient_age: value });
+                                                    setFormData({ ...formData, age: value });
                                                 }}
                                                 placeholder="ENTER PATIENT'S AGE"
                                                 className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-slate-900 font-medium placeholder:text-slate-400"
@@ -474,25 +507,6 @@ export default function ReceptionistPatients() {
                                     </div>
                                 </div>
 
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Assigned Doctor</label>
-                                    <div className="relative">
-                                        <Stethoscope className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                                        <select
-                                            required
-                                            value={formData.doctor_id}
-                                            onChange={(e) => setFormData({ ...formData, doctor_id: e.target.value })}
-                                            className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-slate-900 font-medium appearance-none"
-                                        >
-                                            <option value="">Select Doctor</option>
-                                            {displayDoctors.map(doc => (
-                                                <option key={doc.id} value={doc.id}>
-                                                    Dr. {doc.full_name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </div>
 
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Address</label>
@@ -526,6 +540,103 @@ export default function ReceptionistPatients() {
                                     </button>
                                 </div>
                             </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+            {/* Patient Profile Modal */}
+            <AnimatePresence>
+                {isProfileModalOpen && selectedPatientProfile && (
+                    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="bg-white rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden flex flex-col max-h-[90vh]"
+                        >
+                            {/* Header */}
+                            <div className="px-8 py-6 flex items-center justify-between">
+                                <h3 className="text-2xl font-bold text-slate-800">Patient Profile</h3>
+                                <button
+                                    onClick={() => { setIsProfileModalOpen(false); setSelectedPatientProfile(null); }}
+                                    className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors text-slate-400 hover:text-slate-600"
+                                >
+                                    <X size={24} />
+                                </button>
+                            </div>
+
+                            {/* Body */}
+                            <div className="px-8 pb-8 overflow-y-auto custom-scrollbar">
+                                <div className="grid grid-cols-2 gap-y-6 gap-x-12 mb-8">
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-400 mb-1">Name:</p>
+                                        <p className="text-lg font-bold text-slate-700">{selectedPatientProfile.full_name}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-400 mb-1">Age:</p>
+                                        <p className="text-lg font-bold text-slate-700">{selectedPatientProfile.age || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-400 mb-1">Gender:</p>
+                                        <p className="text-lg font-bold text-slate-700 capitalize">{selectedPatientProfile.gender || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-400 mb-1">Phone:</p>
+                                        <p className="text-lg font-bold text-slate-700">{selectedPatientProfile.contact_number}</p>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <p className="text-sm font-medium text-slate-400 mb-1">Email:</p>
+                                        <p className="text-lg font-bold text-slate-700">{selectedPatientProfile.email}</p>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <p className="text-sm font-medium text-slate-400 mb-1">Address:</p>
+                                        <p className="text-lg font-bold text-slate-700 leading-relaxed">
+                                            {selectedPatientProfile.address || 'No address provided'}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Appointment History */}
+                                <div className="space-y-4">
+                                    <h4 className="text-lg font-bold text-slate-800">Appointment History</h4>
+                                    <div className="space-y-3">
+                                        {appointments
+                                            .filter(a => String(a.patient_id) === String(selectedPatientProfile.id))
+                                            .sort((a, b) => new Date(b.start_time) - new Date(a.start_time))
+                                            .slice(0, 5) // Show last 5
+                                            .map((appt) => {
+                                                const apptDate = new Date(appt.start_time);
+                                                return (
+                                                    <div key={appt.id} className="flex items-center justify-between p-4 bg-[#f8fafc] rounded-xl border border-slate-100 translate-x-0">
+                                                        <div className="flex items-center gap-3">
+                                                            <p className="text-sm font-bold text-slate-700">
+                                                                {apptDate.toISOString().split('T')[0]} at {apptDate.getHours().toString().padStart(2, '0')}:{apptDate.getMinutes().toString().padStart(2, '0')}
+                                                            </p>
+                                                        </div>
+                                                        <span className={cn(
+                                                            "px-3 py-1 text-[11px] font-bold rounded-lg uppercase tracking-wider",
+                                                            appt.status === 'CONFIRMED' ? "bg-emerald-100 text-[#21a18c]" :
+                                                                appt.status === 'COMPLETED' ? "bg-blue-100 text-blue-600" :
+                                                                    appt.status === 'CANCELLED' ? "bg-rose-100 text-rose-600" :
+                                                                        "bg-slate-100 text-slate-600"
+                                                        )}>
+                                                            {appt.status}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
+                                        {appointments.filter(a => String(a.patient_id) === String(selectedPatientProfile.id)).length === 0 && (
+                                            <p className="text-sm text-slate-400 italic">No appointment history found.</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="mt-8">
+                                    <button className="text-[#21a18c] text-sm font-bold underline hover:text-[#1b8a77] transition-colors">
+                                        View Clinical Notes
+                                    </button>
+                                </div>
+                            </div>
                         </motion.div>
                     </div>
                 )}

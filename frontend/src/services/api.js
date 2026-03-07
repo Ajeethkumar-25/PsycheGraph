@@ -1,13 +1,12 @@
 import axios from 'axios';
 import TokenService from '../token/TokenService';
 
-const API_URL = 'http://65.1.249.160';
+const API_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+console.log('API Base URL:', API_URL);
 
 const api = axios.create({
     baseURL: API_URL,
-    headers: {
-        'Content-Type': 'application/json',
-    },
+    headers: {},
 });
 
 // Request interceptor for adding the bearer token

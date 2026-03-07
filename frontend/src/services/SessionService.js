@@ -21,6 +21,16 @@ const SessionService = {
         return response.data;
     },
 
+    createSoapNote: async ({ patient_id, doctor_id, appointment_id, soap_notes }) => {
+        const response = await api.post('/sessions/', {
+            patient_id,
+            doctor_id,
+            appointment_id,
+            soap_notes
+        });
+        return response.data;
+    },
+
     fetchSessionById: async (session_id) => {
         const response = await api.get(`/sessions/${session_id}`);
         return response.data;
@@ -32,8 +42,13 @@ const SessionService = {
     },
 
     deleteSession: async (session_id) => {
-        await api.delete(`/sessions/${session_id}`);
+        await api.delete(`/sessions/${session_id}/`);
         return session_id;
+    },
+
+    fetchTranscript: async (appointment_id) => {
+        const response = await api.post(`/sessions/${appointment_id}/fetch-transcript/`);
+        return response.data;
     }
 };
 

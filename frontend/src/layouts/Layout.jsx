@@ -1,7 +1,9 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
-import { logout, clearSuccessMessage } from '../store/slices/AllLoginSlice';
+import { logout, clearSuccessMessage, fetchUserProfile } from '../store/slices/AllLoginSlice';
+import { fetchHospitalProfile } from '../store/slices/OrgSlice';
+import { fetchAppointments } from '../store/slices/AppointmentSlice';
 import {
     LayoutDashboard,
     Users,
@@ -39,6 +41,54 @@ function cn(...inputs) {
     return twMerge(clsx(inputs));
 }
 
+// Convert raw base64 string or URL to a displayable src
+function resolveLogoSrc(raw) {
+    if (!raw || typeof raw !== 'string') return null;
+
+    let str = raw.trim();
+    // Strip Python bytes-literal wrapper: b'...' or b"..."
+    if (str.startsWith("b'") && str.endsWith("'")) str = str.slice(2, -1);
+    if (str.startsWith('b"') && str.endsWith('"')) str = str.slice(2, -1);
+
+    // Web URIs or Data URIs
+    if (str.startsWith('data:') || str.startsWith('http://') || str.startsWith('https://')) {
+        // Force direct backend IP calls to go through local proxy to avoid CORS/access issues
+        if (str.includes('65.1.249.160')) {
+            return str.replace(/https?:\/\/65\.1\.249\.160/, '/api');
+        }
+        return str;
+    }
+
+    // Relative paths from backend (e.g., /media/..., media/...)
+    if (str.startsWith('/') || str.startsWith('media/') || /\.(png|jpe?g|gif|svg|webp|ico)(\?.*)?$/i.test(str)) {
+        let path = str.startsWith('/') ? str : `/${str}`;
+
+        // Handle case where backend already returned /api/...
+        if (path.startsWith('/api/')) return path;
+
+        const baseUrl = import.meta.env.VITE_API_BASE_URL && import.meta.env.VITE_API_BASE_URL !== '/api'
+            ? import.meta.env.VITE_API_BASE_URL.replace(/\/api$/, '')
+            : '/api'; // Use proxy in dev or relative base in prod
+
+        return `${baseUrl}${path}`;
+    }
+
+    // Must be a raw base64 string — detect MIME from magic bytes
+    try {
+        const header = str.substring(0, 12);
+        let mime = 'image/png'; // default
+        if (header.startsWith('/9j/')) mime = 'image/jpeg';
+        else if (header.startsWith('iVBOR')) mime = 'image/png';
+        else if (header.startsWith('PHN2') || header.startsWith('PD94')) mime = 'image/svg+xml';
+        else if (header.startsWith('R0lG')) mime = 'image/gif';
+        else if (header.startsWith('UklG')) mime = 'image/webp';
+        else if (header.startsWith('AAAB')) mime = 'image/x-icon';
+        return `data:${mime};base64,${str}`;
+    } catch {
+        return null;
+    }
+}
+
 export default function Layout() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
@@ -50,57 +100,20 @@ export default function Layout() {
     const sidebarProfileRef = useRef(null);
 
     const { user, successMessage } = useSelector((state) => state.auth);
+    const { currentOrg } = useSelector((state) => state.organizations || {});
     const notifications = useSelector(state => state.settings?.notifications || {
         appointmentReminders: false,
         pendingNotes: false,
         patientUpdates: false
     });
+    const { list: appointments } = useSelector((state) => state.appointments || { list: [] });
+    const [activeReminders, setActiveReminders] = useState([]);
+    const notifiedRef = useRef(new Set());
 
     // Check if ANY notification is turned on
     const hasAnyNotificationEnabled = Object.values(notifications).some(val => val === true);
 
-    useEffect(() => {
-        function handleClickOutside(event) {
-            if (profileRef.current && !profileRef.current.contains(event.target)) {
-                setIsProfileOpen(false);
-            }
-            if (sidebarProfileRef.current && !sidebarProfileRef.current.contains(event.target)) {
-                setIsProfileOpen(false);
-            }
-        }
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
-        };
-    }, [profileRef, sidebarProfileRef]);
-
-    useEffect(() => {
-        if (successMessage) {
-            const timer = setTimeout(() => {
-                dispatch(clearSuccessMessage());
-            }, 5000);
-            return () => clearTimeout(timer);
-        }
-    }, [successMessage, dispatch]);
-
-    const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 1024);
-
-    useEffect(() => {
-        const handleResize = () => {
-            const isLg = window.innerWidth >= 1024;
-            setIsDesktop(isLg);
-            if (isLg) setIsSidebarOpen(false); // Close mobile sidebar when resizing to desktop
-        };
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
-
-    const handleLogout = () => {
-        dispatch(logout());
-        navigate('/admin');
-    };
-
-    let navItems = [];
+    const userRole = (user?.role || user?.user?.role)?.toUpperCase();
 
     const getRoleConfig = (role) => {
         switch (role) {
@@ -136,8 +149,120 @@ export default function Layout() {
         }
     };
 
-    const userRole = (user?.role || user?.user?.role)?.toUpperCase();
     const roleConfig = getRoleConfig(userRole);
+
+    useEffect(() => {
+        // Skip profile fetch for doctors — login already provides full data
+        if (user?.id && userRole !== 'DOCTOR') {
+            dispatch(fetchUserProfile());
+        }
+    }, [user?.id, userRole, dispatch]);
+
+    useEffect(() => {
+        function handleClickOutside(event) {
+            if (profileRef.current && !profileRef.current.contains(event.target)) {
+                setIsProfileOpen(false);
+            }
+            if (sidebarProfileRef.current && !sidebarProfileRef.current.contains(event.target)) {
+                setIsProfileOpen(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, [profileRef, sidebarProfileRef]);
+
+    useEffect(() => {
+        if (successMessage) {
+            const timer = setTimeout(() => {
+                dispatch(clearSuccessMessage());
+            }, 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [successMessage, dispatch]);
+
+    // 1. Fetch appointments periodically
+    useEffect(() => {
+        if (userRole !== 'DOCTOR' || !notifications.appointmentReminders) return;
+
+        dispatch(fetchAppointments());
+        const fetchInterval = setInterval(() => dispatch(fetchAppointments()), 60000); // Every minute
+
+        return () => clearInterval(fetchInterval);
+    }, [userRole, notifications.appointmentReminders, dispatch]);
+
+    // 2. Check for upcoming appointments whenever data changes
+    useEffect(() => {
+        if (userRole !== 'DOCTOR' || !notifications.appointmentReminders || !appointments.length) return;
+
+        const checkReminders = () => {
+            const now = new Date();
+            const upcoming = appointments.filter(app => {
+                const doctorId = user?.id || user?.user?.id;
+                if (!doctorId || String(app.doctor_id) !== String(doctorId)) return false;
+                if (app.status !== 'SCHEDULED') return false;
+
+                const appTime = new Date(app.start_time);
+                const diffMs = appTime - now;
+                const diffMin = diffMs / (1000 * 60);
+
+                // If within 15 minutes and not in the past
+                return diffMin > 0 && diffMin <= 15 && !notifiedRef.current.has(app.id);
+            });
+
+            if (upcoming.length > 0) {
+                upcoming.forEach(app => {
+                    notifiedRef.current.add(app.id);
+                    const reminder = {
+                        id: `reminder-${app.id}`,
+                        title: 'Upcoming Appointment',
+                        message: `Appointment with ${app.patient_name || 'Patient'} in 15 minutes.`,
+                        time: new Date(app.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    };
+                    setActiveReminders(prev => [...prev, reminder]);
+
+                    setTimeout(() => {
+                        setActiveReminders(prev => prev.filter(r => r.id !== reminder.id));
+                    }, 10000);
+                });
+            }
+        };
+
+        const checkInterval = setInterval(checkReminders, 30000); // logic check every 30s
+        checkReminders(); // Initial check
+
+        return () => clearInterval(checkInterval);
+    }, [appointments, userRole, notifications.appointmentReminders, user?.id]);
+
+    const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 1024);
+
+    useEffect(() => {
+        const handleResize = () => {
+            const isLg = window.innerWidth >= 1024;
+            setIsDesktop(isLg);
+            if (isLg) setIsSidebarOpen(false); // Close mobile sidebar when resizing to desktop
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    const handleLogout = () => {
+        dispatch(logout());
+        navigate('/admin');
+    };
+
+    let navItems = [];
+
+
+
+    useEffect(() => {
+        // Fetch hospital profile only for admin roles. 
+        // Doctors and receptionists should get their organization data through other means or profile.
+        if (userRole === 'ADMIN' || userRole === 'HOSPITAL') {
+            dispatch(fetchHospitalProfile());
+        }
+    }, [dispatch, userRole]);
 
     if (userRole === 'SUPER_ADMIN') {
         navItems = [
@@ -150,25 +275,26 @@ export default function Layout() {
             'MAIN',
             { name: 'Dashboard', path: '/hospital-admin', icon: LayoutDashboard },
             { name: 'Users', path: '/hospital-admin/users', icon: Users },
-            { name: 'Roles & Permissions', path: '/hospital-admin/roles', icon: Shield },
+            // { name: 'Roles & Permissions', path: '/hospital-admin/roles', icon: Shield },
             'CLINIC',
-            { name: 'Clinic Settings', path: '/hospital-admin/clinic-settings', icon: Building2 },
+            // { name: 'Clinic Settings', path: '/hospital-admin/clinic-settings', icon: Building2 },
             { name: 'Working Hours', path: '/hospital-admin/working-hours', icon: Clock },
             { name: 'Appointments Overview', path: '/hospital-admin/appointments', icon: Calendar },
             'INSIGHTS',
             { name: 'Analytics', path: '/hospital-admin/analytics', icon: LineChart },
             { name: 'Usage Activity', path: '/hospital-admin/activity', icon: Activity },
             'SYSTEM',
-            { name: 'Notifications', path: '/hospital-admin/notifications', icon: Bell },
+            // { name: 'Notifications', path: '/hospital-admin/notifications', icon: Bell },
             { name: 'Branding', path: '/hospital-admin/branding', icon: Palette },
-            { name: 'Audit Logs (Read-only)', path: '/hospital-admin/audit-logs', icon: FileSignature },
-            { name: 'Settings', path: '/hospital-admin/settings', icon: Settings },
+            // { name: 'Audit Logs (Read-only)', path: '/hospital-admin/audit-logs', icon: FileSignature },
+            // { name: 'Settings', path: '/hospital-admin/settings', icon: Settings },
         ];
     } else if (userRole === 'RECEPTIONIST') {
         navItems = [
             { name: 'Dashboard', path: '/receptionist', icon: LayoutDashboard },
             { name: 'Patients', path: '/receptionist/patients', icon: Users },
-            { name: 'Appointments', path: '/receptionist/appointments', icon: Calendar },
+            { name: 'Calendar', path: '/receptionist/calendar', icon: Calendar },
+            { name: 'Appointments', path: '/receptionist/appointments', icon: ClipboardList },
         ];
     } else {
         // Doctor
@@ -176,19 +302,49 @@ export default function Layout() {
             { name: 'Dashboard', path: '/doctor', icon: LayoutDashboard },
             { name: 'My Patient', path: '/doctor/patients', icon: Users },
             { name: 'Appointments', path: '/doctor/schedule', icon: Calendar },
-            { name: 'Live Session', path: '/sessions', icon: Video },
+            { name: 'Session', path: '/sessions', icon: Video },
             { name: 'SOAP Notes', path: '/doctor/soap-notes', icon: FileText },
-            { name: 'Session Summaries', path: '/doctor/summaries', icon: ClipboardList },
-            { name: 'Treatment Plans', path: '/doctor/treatment-plans', icon: HeartPulse },
-            { name: 'Longitudinal Trends', path: '/doctor/trends', icon: LineChart },
-            { name: 'Deleted Records', path: '/doctor/deleted', icon: Trash },
-            { name: 'Settings', path: '/doctor/settings', icon: Settings },
+            // { name: 'Session Summaries', path: '/doctor/summaries', icon: ClipboardList },
+            // { name: 'Treatment Plans', path: '/doctor/treatment-plans', icon: HeartPulse },
+            // { name: 'Longitudinal Trends', path: '/doctor/trends', icon: LineChart },
+            // { name: 'Deleted Records', path: '/doctor/deleted', icon: Trash },
+            // { name: 'Settings', path: '/doctor/settings', icon: Settings },
         ];
     }
 
     return (
         <div className="flex h-screen bg-[#062f3f] relative overflow-hidden">
             {/* Success Toast Notification */}
+            {/* Appointment Reminders */}
+            <div className="fixed top-24 right-6 lg:right-8 z-[100] flex flex-col gap-3 pointer-events-none">
+                <AnimatePresence>
+                    {activeReminders.map((reminder) => (
+                        <motion.div
+                            key={reminder.id}
+                            initial={{ opacity: 0, x: 50, scale: 0.9 }}
+                            animate={{ opacity: 1, x: 0, scale: 1 }}
+                            exit={{ opacity: 0, x: 20, scale: 0.9, filter: "blur(5px)" }}
+                            className="pointer-events-auto p-4 bg-indigo-900/95 backdrop-blur-xl border border-indigo-400/30 rounded-2xl flex items-center gap-4 shadow-2xl min-w-[320px] relative overflow-hidden group"
+                        >
+                            <div className="h-11 w-11 bg-indigo-500/20 text-indigo-400 rounded-full flex items-center justify-center shrink-0 border border-indigo-500/30 ring-4 ring-indigo-500/10">
+                                <Clock size={22} />
+                            </div>
+                            <div className="pr-2">
+                                <h4 className="text-sm font-bold text-white tracking-wide mb-0.5">{reminder.title}</h4>
+                                <p className="text-xs font-semibold text-indigo-100/80">{reminder.message}</p>
+                                <p className="text-[10px] font-black text-indigo-400 uppercase mt-1">Starts at {reminder.time}</p>
+                            </div>
+                            <button
+                                onClick={() => setActiveReminders(prev => prev.filter(r => r.id !== reminder.id))}
+                                className="ml-auto p-1.5 hover:bg-white/10 text-white/50 hover:text-white rounded-xl transition-colors"
+                            >
+                                <X size={16} />
+                            </button>
+                        </motion.div>
+                    ))}
+                </AnimatePresence>
+            </div>
+
             <AnimatePresence>
                 {successMessage && (
                     <motion.div
@@ -264,12 +420,30 @@ export default function Layout() {
                     isSidebarCollapsed ? "justify-center px-2" : "justify-between"
                 )}>
                     <div className="flex items-center gap-3 w-full">
-                        <motion.div
-                            whileHover={{ scale: 1.05, rotate: 5 }}
-                            className="bg-gradient-to-br from-blue-500 to-cyan-500 p-2 rounded-xl text-white shadow-lg shadow-cyan-500/30 flex-shrink-0"
-                        >
-                            <BrainCircuit size={24} />
-                        </motion.div>
+                        {(() => {
+                            // Use org logo for all roles if available from hospital profile
+                            const rawLogo = currentOrg?.logo
+                                || currentOrg?.logo_url
+                                || currentOrg?.profile_picture
+                                || currentOrg?.image;
+                            const logoSrc = resolveLogoSrc(rawLogo);
+                            return logoSrc ? (
+                                <motion.img
+                                    whileHover={{ scale: 1.05 }}
+                                    src={logoSrc}
+                                    alt="Organization Logo"
+                                    className="h-10 w-10 object-contain rounded-xl shrink-0 bg-white/10 p-1"
+                                    onError={(e) => { e.target.style.display = 'none'; }}
+                                />
+                            ) : (
+                                <motion.div
+                                    whileHover={{ scale: 1.05, rotate: 5 }}
+                                    className="bg-gradient-to-br from-blue-500 to-cyan-500 p-2 rounded-xl text-white shadow-lg shadow-cyan-500/30 flex-shrink-0"
+                                >
+                                    <BrainCircuit size={24} />
+                                </motion.div>
+                            );
+                        })()}
                         {!isSidebarCollapsed && (
                             <motion.div
                                 initial={{ opacity: 0 }}
@@ -277,12 +451,13 @@ export default function Layout() {
                                 exit={{ opacity: 0 }}
                                 className="flex-1 overflow-hidden"
                             >
-                                <span className="text-xl font-black text-white tracking-tight block leading-none truncate" title={user?.clinicName || "PsycheGraph"}>
-                                    {user?.clinicName || "PsycheGraph"}
+                                <span className="text-xl font-black text-white tracking-tight block leading-none truncate"
+                                    title={currentOrg?.full_name || currentOrg?.name || 'PsycheGraph'}>
+                                    {currentOrg?.full_name || currentOrg?.name || 'PsycheGraph'}
                                 </span>
                                 <div className="flex items-center gap-2 mt-1">
                                     <span className={cn(
-                                        "text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded",
+                                        "text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 mt-2 rounded",
                                         roleConfig.bg, roleConfig.text
                                     )}>
                                         {roleConfig.label}

@@ -2,14 +2,8 @@ import api from './api';
 
 const AppointmentService = {
     fetchAppointments: async () => {
-        try {
-            const response = await api.get('/appointments/updated');
-            return response.data;
-        } catch (error) {
-            console.warn("Failed to fetch from /appointments/updated, falling back to /appointments", error);
-            const fallback = await api.get('/appointments');
-            return fallback.data;
-        }
+        const response = await api.get('/appointments');
+        return response.data;
     },
 
     fetchAvailability: async (params) => {
@@ -45,6 +39,10 @@ const AppointmentService = {
 
     rescheduleAppointment: async (appointmentId, data) => {
         const response = await api.post(`/appointments/${appointmentId}/reschedule`, data);
+        return response.data;
+    },
+    fetchUpdatedAppointments: async () => {
+        const response = await api.get('/appointments/updated');
         return response.data;
     }
 };

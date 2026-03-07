@@ -50,17 +50,13 @@ const AllUserService = {
         }
     },
 
-    fetchUserById: async (id, role) => {
-        let endpoint = `/users/${id}`;
-        if (role === 'DOCTOR') endpoint = `/admin/doctors/${id}`;
-        else if (role === 'RECEPTIONIST') endpoint = `/admin/receptionists/${id}`;
-        else if (role === 'HOSPITAL') endpoint = `/admin/hospitals/${id}`;
-
+    fetchUserById: async (id) => {
+        const endpoint = `/users/${id}`;
         const response = await api.get(endpoint);
         return response.data;
     },
 
-    
+
     createUser: async (role, userData) => {
         let endpoint = '/auth/register/user'; // Default placeholder
         if (role === 'DOCTOR') endpoint = '/admin/doctors';
@@ -69,6 +65,13 @@ const AllUserService = {
 
         // Strip fields not allowed by backend schemas
         const { role: r, organization_id, ...cleanData } = userData;
+
+        // Ensure assigned_doctor_user_ids is always an array for RECEPTIONIST
+        if (role === 'RECEPTIONIST') {
+            cleanData.assigned_doctor_user_ids = Array.isArray(cleanData.assigned_doctor_user_ids)
+                ? cleanData.assigned_doctor_user_ids
+                : [];
+        }
 
         const response = await api.post(endpoint, cleanData);
         return response.data;
@@ -82,6 +85,13 @@ const AllUserService = {
 
         // Strip fields not allowed by backend schemas
         const { role: r, organization_id, ...cleanData } = data;
+
+        // Ensure assigned_doctor_user_ids is always an array for RECEPTIONIST
+        if (role === 'RECEPTIONIST') {
+            cleanData.assigned_doctor_user_ids = Array.isArray(cleanData.assigned_doctor_user_ids)
+                ? cleanData.assigned_doctor_user_ids
+                : [];
+        }
 
         const response = await api.put(endpoint, cleanData);
         return response.data;

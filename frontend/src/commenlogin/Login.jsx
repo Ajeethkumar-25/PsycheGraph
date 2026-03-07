@@ -398,7 +398,9 @@ export default function Login({
                                         <div className="bg-red-100 p-1 rounded-full shrink-0">
                                             <ShieldCheck size={14} className="text-red-500" />
                                         </div>
-                                        <p className="font-medium">{error}</p>
+                                        <p className="font-medium">
+                                            {typeof error === 'string' ? error : (error.msg || JSON.stringify(error))}
+                                        </p>
                                     </motion.div>
                                 )}
                             </AnimatePresence>

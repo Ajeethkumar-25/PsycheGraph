@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { fetchOrganizations } from '../../store/slices/OrgSlice';
 import { fetchUsers, fetchUserById, clearSelectedUser } from '../../store/slices/AllUserSlice';
-import { fetchPatients, fetchPatientById, clearSelectedPatient } from '../../store/slices/PatientSlice';
+import { fetchPatients, fetchPatientById, clearSelectedPatient, setCurrentPatient } from '../../store/slices/PatientSlice';
 
 
 const cn = (...classes) => classes.filter(Boolean).join(' ');
@@ -72,6 +72,7 @@ export default function HospitalDetails() {
 
     const handleUserClick = (item) => {
         if (activeTab === 'PATIENT') {
+            dispatch(setCurrentPatient(item));
             dispatch(fetchPatientById(item.id));
         } else {
             dispatch(fetchUserById({ id: item.id, role: item.role }));
@@ -182,7 +183,15 @@ export default function HospitalDetails() {
                                                 <div className="min-w-0 flex-1">
                                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Receptionist</p>
                                                     <p className="font-bold text-slate-700 text-sm md:text-sm truncate">
-                                                        {users.find(u => u.role === 'RECEPTIONIST' && String(u.doctor_id) === String(selectedUser.id))?.full_name || 'Unassigned'}
+                                                        {(() => {
+                                                            const reps = users.filter(u =>
+                                                                u.role === 'RECEPTIONIST' && (
+                                                                    String(u.doctor_id) === String(selectedUser.id) ||
+                                                                    (u.assigned_doctors && u.assigned_doctors.some(d => String(d.doctor_id || d.id) === String(selectedUser.id)))
+                                                                )
+                                                            );
+                                                            return reps.length > 0 ? reps.map(r => r.full_name || r.name).join(', ') : 'Unassigned';
+                                                        })()}
                                                     </p>
                                                 </div>
                                             </div>
@@ -207,9 +216,11 @@ export default function HospitalDetails() {
                                                     <Stethoscope size={16} className="md:w-4 md:h-4" />
                                                 </div>
                                                 <div className="min-w-0 flex-1">
-                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Assigned Doctor</p>
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Assigned Doctors</p>
                                                     <p className="font-bold text-slate-700 text-sm md:text-sm truncate">
-                                                        {users.find(u => String(u.id) === String(selectedUser.doctor_id))?.full_name || 'Unassigned'}
+                                                        {selectedUser.assigned_doctors?.length > 0
+                                                            ? selectedUser.assigned_doctors.map(d => d.name || d.full_name || users.find(u => String(u.id) === String(d.doctor_id || d.id))?.full_name).filter(Boolean).join(', ')
+                                                            : (users.find(u => String(u.id) === String(selectedUser.doctor_id))?.full_name || 'Unassigned')}
                                                     </p>
                                                 </div>
                                             </div>
@@ -218,9 +229,15 @@ export default function HospitalDetails() {
                                                     <Users size={16} className="md:w-4 md:h-4" />
                                                 </div>
                                                 <div className="min-w-0 flex-1">
-                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Assigned Patients</p>
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Associated Patients</p>
                                                     <p className="font-bold text-slate-700 text-sm md:text-sm truncate">
-                                                        {patients.filter(p => String(p.created_by) === String(selectedUser.id) || String(p.doctor_id) === String(selectedUser.doctor_id)).length} Patients
+                                                        {(() => {
+                                                            const assignedDoctorIds = selectedUser.assigned_doctors?.map(d => String(d.doctor_id || d.id)) || [String(selectedUser.doctor_id)];
+                                                            return patients.filter(p =>
+                                                                String(p.created_by) === String(selectedUser.id) ||
+                                                                assignedDoctorIds.includes(String(p.doctor_id))
+                                                            ).length;
+                                                        })()} Patients
                                                     </p>
                                                 </div>
                                             </div>

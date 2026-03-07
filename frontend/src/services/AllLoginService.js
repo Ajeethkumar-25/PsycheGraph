@@ -20,7 +20,7 @@ const AllLoginService = {
         const response = await api.post('/auth/token', credentials);
         return response.data;
     },
-    
+
 
     register: async (userData) => {
         // This is a generic registration, usually maps to /users if it exists

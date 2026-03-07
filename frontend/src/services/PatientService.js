@@ -12,17 +12,17 @@ const PatientService = {
     },
 
     fetchPatientById: async (patient_id) => {
-        const response = await api.get(`/patients/${patient_id}`);
+        const response = await api.get(`/patients/${patient_id}/`);
         return response.data;
     },
 
     updatePatient: async (patient_id, data) => {
-        const response = await api.put(`/patients/${patient_id}`, data);
+        const response = await api.put(`/patients/${patient_id}/`, data);
         return response.data;
     },
 
     deletePatient: async (patient_id) => {
-        await api.delete(`/patients/${patient_id}`);
+        await api.delete(`/patients/${patient_id}/`);
         return patient_id;
     }
 };
