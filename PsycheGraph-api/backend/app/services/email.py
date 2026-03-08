@@ -123,3 +123,34 @@ Regards,
 PsycheGraph Team
 """
     _send(to_email, subject, body)
+
+def send_reschedule_email(
+    to_email: str,
+    recipient_name: str,
+    doctor_name: str,
+    appointment_date: str,
+    start_time: str,
+    end_time: str,
+    meet_link: str = None
+):
+    subject = "PsycheGraph - Your Appointment Has Been Rescheduled"
+    body = f"""Dear {recipient_name},
+
+Your appointment with Dr. {doctor_name} has been rescheduled.
+
+New Appointment Details:
+-----------------------------
+Doctor Name   : Dr. {doctor_name}
+Date          : {appointment_date}
+Start Time    : {start_time}
+End Time      : {end_time}
+-----------------------------
+
+{f"Join your Google Meet session here:{chr(10)}{meet_link}{chr(10)}" if meet_link else "Your Meet link will be sent 30 minutes before the appointment."}
+
+Please ensure you are available at the new time.
+
+Regards,
+PsycheGraph Team
+"""
+    _send(to_email, subject, body)
