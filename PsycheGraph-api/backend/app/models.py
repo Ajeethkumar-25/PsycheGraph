@@ -42,7 +42,7 @@ class Organization(Base):
     is_approved = Column(Boolean, default=False, nullable=False, index=True)
     is_active   = Column(Boolean, default=True,  nullable=False, index=True)
     address     = Column(String, nullable=True)
-    logo_url    = Column(String, nullable=True)
+    logo_url    = Column(Text, nullable=True)
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships

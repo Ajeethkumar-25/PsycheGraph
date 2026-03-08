@@ -105,6 +105,7 @@ MIGRATIONS = [
     ("make_patient_doctor_id_nullable", "ALTER TABLE patients ALTER COLUMN doctor_id DROP NOT NULL;"),
     ("drop_user_shift_timing",         "ALTER TABLE users DROP COLUMN IF EXISTS shift_timing;"),
     ("drop_receptionist_shift_timing", "ALTER TABLE receptionists DROP COLUMN IF EXISTS shift_timing;"),
+    ("alter_org_logo_url_to_text", "ALTER TABLE organizations ALTER COLUMN logo_url TYPE TEXT;"),
 ]
 
 

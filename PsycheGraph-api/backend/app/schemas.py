@@ -229,6 +229,7 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     organization_id: Optional[int] = None
     password: Optional[str] = None
+    assigned_doctor_user_ids: Optional[List[int]] = None
 
 
 class OrganizationUpdate(BaseModel):

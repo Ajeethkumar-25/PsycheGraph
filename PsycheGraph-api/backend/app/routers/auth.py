@@ -8,14 +8,7 @@ from typing import Union, Optional
 from .. import models, schemas, auth, database
 from ..models import Receptionist
 import shutil, os, uuid
-
-BASE_URL = os.getenv("BASE_URL", "http://65.1.249.160")
-
-LOGO_UPLOAD_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "uploads", "logos"
-)
-os.makedirs(LOGO_UPLOAD_DIR, exist_ok=True)
+import base64
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -286,11 +279,10 @@ async def register_hospital_admin(
         ext = os.path.splitext(logo.filename)[1].lower()
         if ext not in [".jpg", ".jpeg", ".png", ".webp", ".svg"]:
             raise HTTPException(status_code=400, detail="Logo must be JPG, PNG, WEBP or SVG")
-        filename = f"{uuid.uuid4()}{ext}"
-        file_path = os.path.join(LOGO_UPLOAD_DIR, filename)
-        with open(file_path, "wb") as f:
-            shutil.copyfileobj(logo.file, f)
-        logo_url = f"{BASE_URL}/uploads/logos/{filename}"
+        contents = await logo.read()
+        mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".svg": "image/svg+xml"}
+        mime = mime_map.get(ext, "image/png")
+        logo_url = f"data:{mime};base64,{base64.b64encode(contents).decode('utf-8')}"
 
     user_data = schemas.HospitalRegister(
         email=email,

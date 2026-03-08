@@ -7,15 +7,10 @@ from sqlalchemy.orm import selectinload
 from ..services.email import send_license_key_email
 from concurrent.futures import ThreadPoolExecutor
 import shutil, os, uuid
-import logging                                          
+import logging  
+import base64                                        
 
-logger = logging.getLogger("admin")                    
-
-LOGO_UPLOAD_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "uploads", "logos"
-)
-os.makedirs(LOGO_UPLOAD_DIR, exist_ok=True)
+logger = logging.getLogger("admin")  
 
 executor = ThreadPoolExecutor()
 
@@ -306,7 +301,7 @@ async def delete_hospital(
 @hospital_profile_router.get("/profile", response_model=schemas.HospitalProfileOut)
 async def get_hospital_profile(
     org_id: Optional[int] = None,
-    current_user: models.User = Depends(dependencies.require_role([models.UserRole.HOSPITAL, models.UserRole.SUPER_ADMIN])),
+    current_user: models.User = Depends(dependencies.require_role([models.UserRole.HOSPITAL, models.UserRole.SUPER_ADMIN, models.UserRole.RECEPTIONIST, models.UserRole.DOCTOR])),
     db: AsyncSession = Depends(database.get_db)
 ):
     """GET hospital profile — org name, logo, address, email + admin full_name, phone_number."""
@@ -403,15 +398,10 @@ async def update_hospital_profile(
         ext = os.path.splitext(logo.filename)[1].lower()
         if ext not in [".jpg", ".jpeg", ".png", ".webp", ".svg"]:
             raise HTTPException(status_code=400, detail="Logo must be JPG, PNG, WEBP or SVG")
-        filename = f"{uuid.uuid4()}{ext}"
-        # ADDED: was bare open() with no error handling — OS errors would crash with raw traceback
-        try:
-            with open(os.path.join(LOGO_UPLOAD_DIR, filename), "wb") as f:
-                shutil.copyfileobj(logo.file, f)
-        except OSError as e:
-            logger.error(f"Logo file save failed for org_id={target_org_id}: {e}")
-            raise HTTPException(status_code=500, detail="Logo upload failed. Please try again.")
-        org.logo_url = f"/uploads/logos/{filename}"
+        contents = await logo.read()
+        mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".svg": "image/svg+xml"}
+        mime = mime_map.get(ext, "image/png")
+        org.logo_url = f"data:{mime};base64,{base64.b64encode(contents).decode('utf-8')}"
 
     # ADDED: was a bare commit with no error handling
     try:

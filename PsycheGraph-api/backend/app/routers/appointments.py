@@ -8,7 +8,7 @@ from ..database import AsyncSessionLocal
 from sqlalchemy import text
 from datetime import datetime, timedelta, timezone
 from ..services.google_calendar import GoogleCalendarService
-from ..services.email import send_meet_link_email
+from ..services.email import send_meet_link_email, send_reschedule_email
 from ..services.fireflies import send_bot_to_meeting as ff_send_bot
 from apscheduler.schedulers.background import BackgroundScheduler
 import asyncio
@@ -583,6 +583,7 @@ async def get_appointments(
 async def reschedule_appointment(
     appointment_id: int,
     new_booking: schemas.AppointmentReschedule,
+    background_tasks: BackgroundTasks,
     current_user: models.User = Depends(dependencies.require_role([models.UserRole.DOCTOR, models.UserRole.RECEPTIONIST])),
     db: AsyncSession = Depends(database.get_db)
 ):
@@ -625,6 +626,47 @@ async def reschedule_appointment(
         await db.rollback()
         logger.error(f"reschedule_appointment commit failed for appointment_id={appointment_id}: {e}")
         raise HTTPException(status_code=500, detail="Reschedule failed. Please try again.")
+
+    # Send reschedule emails to patient and doctor
+    new_date_str  = new_slot.start_time.strftime("%Y-%m-%d")
+    new_start_str = new_slot.start_time.strftime("%H:%M")
+    new_end_str   = new_slot.end_time.strftime("%H:%M")
+
+    patient = appointment.patient
+    doctor_user = appointment.doctor
+
+    if patient and patient.email:
+        background_tasks.add_task(
+            send_reschedule_email,
+            to_email=patient.email,
+            recipient_name=patient.full_name,
+            doctor_name=appointment.doctor_name,
+            appointment_date=new_date_str,
+            start_time=new_start_str,
+            end_time=new_end_str,
+            meet_link=appointment.meet_link
+        )
+    if doctor_user and doctor_user.email:
+        background_tasks.add_task(
+            send_reschedule_email,
+            to_email=doctor_user.email,
+            recipient_name=f"Dr. {appointment.doctor_name}",
+            doctor_name=appointment.doctor_name,
+            appointment_date=new_date_str,
+            start_time=new_start_str,
+            end_time=new_end_str,
+            meet_link=appointment.meet_link
+        )
+
+    res = await db.execute(
+        select(models.Appointment)
+        .options(
+            selectinload(models.Appointment.doctor),
+            selectinload(models.Appointment.patient)
+        )
+        .where(models.Appointment.id == appointment_id)
+    )
+    return res.scalars().first()
 
 
 @router.get("/updated", response_model=List[schemas.AppointmentOut])
