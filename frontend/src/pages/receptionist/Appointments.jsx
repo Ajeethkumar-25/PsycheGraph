@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchAppointments, createAppointment, deleteAppointment, createAvailability } from '../../store/slices/AppointmentSlice';
+import { fetchAppointments, createAppointment, deleteAppointment, createAvailability, rescheduleAppointment } from '../../store/slices/AppointmentSlice';
 import { fetchPatients, updatePatient } from '../../store/slices/PatientSlice';
 import { fetchUsers } from '../../store/slices/AllUserSlice';
 import { Plus, Calendar as CalendarIcon, Clock, Trash2, X, Loader2, ChevronRight, CheckCircle2, User, ChevronLeft, Stethoscope, MapPin, Wallet, Video, Building, Search, Edit2, RefreshCcw } from 'lucide-react';
@@ -362,11 +362,27 @@ export default function ReceptionistAppointments() {
             const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
 
             if (isRescheduling && editingAppointment) {
-                const reschedulePayload = {
+                // First create a new availability slot for the new time
+                const slotPayload = {
+                    doctor_id: parseInt(formData.doctor_id),
                     start_time: startDateTime.toISOString(),
                     end_time: endDateTime.toISOString()
                 };
 
+                const orgIdValue = currentUser?.organization_id || currentUser?.user?.organization_id;
+                if (orgIdValue) {
+                    slotPayload.organization_id = parseInt(orgIdValue);
+                }
+
+                console.log('Creating availability with payload:', slotPayload);
+                const slot = await dispatch(createAvailability(slotPayload)).unwrap();
+
+                // Now reschedule using the new slot ID
+                const reschedulePayload = {
+                    new_availability_id: slot.id
+                };
+
+                console.log('Rescheduling with payload:', reschedulePayload);
                 await dispatch(rescheduleAppointment({
                     id: editingAppointment.id,
                     data: reschedulePayload
@@ -379,6 +395,12 @@ export default function ReceptionistAppointments() {
                     end_time: endDateTime.toISOString()
                 };
 
+                const orgIdValue = currentUser?.organization_id || currentUser?.user?.organization_id;
+                if (orgIdValue) {
+                    slotPayload.organization_id = parseInt(orgIdValue);
+                }
+
+                console.log('Creating availability with payload:', slotPayload);
                 const slot = await dispatch(createAvailability(slotPayload)).unwrap();
 
                 const bookingPayload = {
@@ -391,6 +413,7 @@ export default function ReceptionistAppointments() {
                     availability_id: slot.id
                 };
 
+                console.log('Booking appointment with payload:', bookingPayload);
                 await dispatch(createAppointment(bookingPayload)).unwrap();
 
                 // Update patient with the assigned doctor ID
@@ -407,6 +430,7 @@ export default function ReceptionistAppointments() {
                         age: selectedPatient.age || 0
                     };
                     try {
+                        console.log('Updating patient with payload:', updatePayload);
                         await dispatch(updatePatient({ id: selectedPatient.id, data: updatePayload })).unwrap();
                     } catch (err) {
                         console.error("Failed to update patient with doctor_id", err);
@@ -418,9 +442,11 @@ export default function ReceptionistAppointments() {
 
             closeModal();
             dispatch(fetchAppointments()); // Refresh list
-            dispatch(fetchPatients()); // Refresh patients list to show the new doctor assignment inline if needed
+            dispatch(fetchPatients()); // Refresh patients list
         } catch (err) {
-            alert(`Failed: ${err.message || err}`);
+            console.error('Failed to submit appointment:', err);
+            const errorMsg = typeof err === 'object' ? JSON.stringify(err) : err;
+            alert(`Failed: ${errorMsg}`);
         } finally {
             setIsSubmitting(false);
         }
