@@ -57,7 +57,6 @@ class DoctorOut(UserOut):
 
 
 class ReceptionistOut(UserOut):
-    shift_timing: Optional[str] = None
     assigned_doctors: Optional[List[DoctorBasic]] = None
 
     @model_validator(mode="before")
@@ -104,7 +103,6 @@ class ReceptionistRegister(BaseModel):
     email: EmailStr
     password: str
     full_name: str
-    shift_timing: str
     assigned_doctor_user_ids: Optional[List[int]] = []
 
 

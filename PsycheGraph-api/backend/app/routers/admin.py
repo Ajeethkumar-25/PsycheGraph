@@ -619,7 +619,6 @@ async def create_receptionist(
         role=models.UserRole.RECEPTIONIST,
         organization_id=org_id,
         full_name=user.full_name,
-        shift_timing=user.shift_timing,
     )
     db.add(new_user)
     try:
@@ -633,7 +632,6 @@ async def create_receptionist(
     new_receptionist = models.Receptionist(
         user_id=new_user.id,
         full_name=user.full_name,
-        shift_timing=user.shift_timing,
         doctor_ids=validated_doctor_user_ids,
     )
     db.add(new_receptionist)

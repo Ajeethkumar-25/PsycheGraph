@@ -90,7 +90,7 @@ class User(Base):
     phone_number = Column(String, nullable=True)
 
     # Receptionist-specific fields
-    shift_timing = Column(String, nullable=True)
+    
 
 
     # -------------------------------------------------------------------
@@ -187,7 +187,6 @@ class Receptionist(Base):
     id             = Column(Integer, primary_key=True, index=True)
     user_id        = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
     full_name      = Column(String, nullable=True)
-    shift_timing   = Column(String, nullable=True)
     # Stores the user_id values of linked doctors — mirrors User.doctor_ids
     # so the relationship below can resolve Doctor rows without a join table.
     doctor_ids     = Column(ARRAY(Integer), nullable=True, default=list)
