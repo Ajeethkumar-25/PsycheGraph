@@ -9,6 +9,8 @@ from .. import models, schemas, auth, database
 from ..models import Receptionist
 import shutil, os, uuid
 
+BASE_URL = os.getenv("BASE_URL", "http://65.1.249.160")
+
 LOGO_UPLOAD_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "uploads", "logos"
@@ -30,7 +32,6 @@ def build_user_with_token(user: models.User, access_token: str, refresh_token: s
         role=user.role,
         organization_id=user.organization_id,
         is_active=user.is_active,
-        shift_timing=user.shift_timing,
         phone_number=user.phone_number,
         doctor_id=user.doctor_profile.id if user.role == models.UserRole.DOCTOR and user.doctor_profile else None,
         doctor_name=None,
@@ -289,7 +290,7 @@ async def register_hospital_admin(
         file_path = os.path.join(LOGO_UPLOAD_DIR, filename)
         with open(file_path, "wb") as f:
             shutil.copyfileobj(logo.file, f)
-        logo_url = f"/uploads/logos/{filename}"
+        logo_url = f"{BASE_URL}/uploads/logos/{filename}"
 
     user_data = schemas.HospitalRegister(
         email=email,
