@@ -22,12 +22,6 @@ const AllLoginService = {
     },
 
 
-    register: async (userData) => {
-        // This is a generic registration, usually maps to /users if it exists
-        const response = await api.post('/users', userData);
-        return response.data;
-    },
-
     registerHospital: async (userData) => {
         const response = await api.post('/auth/register/hospital', userData);
         return response.data;

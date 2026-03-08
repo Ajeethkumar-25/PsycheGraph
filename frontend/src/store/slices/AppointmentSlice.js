@@ -86,12 +86,16 @@ const appointmentSlice = createSlice({
     initialState: {
         list: [],
         availability: [],
+        updatedList: [], // List of rescheduled appointments for notification
         loading: false,
         error: null,
     },
     reducers: {
         clearError: (state) => {
             state.error = null;
+        },
+        dismissNotification: (state, action) => {
+            state.updatedList = state.updatedList.filter(app => app.id !== action.payload);
         }
     },
     extraReducers: (builder) => {
@@ -113,7 +117,7 @@ const appointmentSlice = createSlice({
                 if (index !== -1) state.list[index] = action.payload;
             })
             .addCase(fetchUpdatedAppointments.fulfilled, (state, action) => {
-                state.list = action.payload; // Assuming this returns the full list or we can merge
+                state.updatedList = action.payload;
             })
             .addCase(deleteAppointment.fulfilled, (state, action) => {
                 state.list = state.list.filter(a => a.id !== action.payload);
@@ -130,5 +134,5 @@ const appointmentSlice = createSlice({
     },
 });
 
-export const { clearError } = appointmentSlice.actions;
+export const { clearError, dismissNotification } = appointmentSlice.actions;
 export default appointmentSlice.reducer;

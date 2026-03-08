@@ -20,8 +20,20 @@ export default function SuperAdminUsers() {
     const fetchAllUsers = async () => {
         try {
             setLoading(true);
-            const response = await api.get('/users/');
-            setUsers(response.data);
+            // Combined fetch since /users/ is being removed
+            const [doctors, receptionists, hospitals] = await Promise.all([
+                api.get('/admin/doctors').catch(() => ({ data: [] })),
+                api.get('/admin/receptionists').catch(() => ({ data: [] })),
+                api.get('/admin/hospitals').catch(() => ({ data: [] }))
+            ]);
+
+            const combined = [
+                ...(hospitals.data || []).map(h => ({ ...h, role: 'HOSPITAL' })),
+                ...(doctors.data || []).map(d => ({ ...d, role: 'DOCTOR' })),
+                ...(receptionists.data || []).map(r => ({ ...r, role: 'RECEPTIONIST' }))
+            ];
+
+            setUsers(combined);
         } catch (error) {
             console.error('Failed to fetch users', error);
         } finally {
@@ -38,8 +50,11 @@ export default function SuperAdminUsers() {
 
         setIsDeleting(user.id);
         try {
-            // Delete user based on role - Superadmin typically deletes hospitals/admins
-            const endpoint = user.role === 'HOSPITAL' ? `/admin/hospitals/${user.id}` : `/users/${user.id}`;
+            // Delete user based on role - Use specific endpoints only
+            let endpoint = `/admin/hospitals/${user.id}`;
+            if (user.role === 'DOCTOR') endpoint = `/admin/doctors/${user.id}`;
+            else if (user.role === 'RECEPTIONIST') endpoint = `/admin/receptionists/${user.id}`;
+
             await api.delete(endpoint);
             setUsers(users.filter(u => u.id !== user.id));
         } catch (error) {
@@ -199,8 +214,8 @@ export default function SuperAdminUsers() {
                                         key={i}
                                         onClick={() => setCurrentPage(i + 1)}
                                         className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${currentPage === i + 1
-                                                ? "bg-primary-600 text-white shadow-md shadow-primary-200"
-                                                : "bg-white text-slate-600 border border-slate-200 hover:border-primary-300 hover:text-primary-600"
+                                            ? "bg-primary-600 text-white shadow-md shadow-primary-200"
+                                            : "bg-white text-slate-600 border border-slate-200 hover:border-primary-300 hover:text-primary-600"
                                             }`}
                                     >
                                         {i + 1}

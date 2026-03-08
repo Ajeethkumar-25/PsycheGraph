@@ -31,13 +31,25 @@ const OrgService = {
         return response.data;
     },
 
-    getHospitalProfile: async () => {
-        const response = await api.get('/admin/hospital/profile');
+    getHospitalProfile: async (org_id) => {
+        const response = await api.get('/admin/hospital/profile', {
+            params: org_id ? { org_id } : {}
+        });
         return response.data;
     },
 
-    updateHospitalProfile: async (data) => {
-        const response = await api.put('/admin/hospital/profile', data);
+    updateHospitalProfile: async (org_id, data) => {
+        const formData = new FormData();
+        if (data.phone_number) formData.append('phone_number', data.phone_number);
+        if (data.address) formData.append('address', data.address);
+        if (data.logo) formData.append('logo', data.logo);
+
+        const response = await api.put('/admin/hospital/profile', formData, {
+            params: org_id ? { org_id } : {},
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        });
         return response.data;
     }
 };

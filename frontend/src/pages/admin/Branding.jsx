@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchHospitalProfile, updateHospitalProfile, clearOrgError } from '../../store/slices/OrgSlice';
@@ -16,14 +16,50 @@ import {
     Globe,
     Image as ImageIcon,
     Sparkles,
-    X
+    X,
+    Check
 } from 'lucide-react';
 
+// Toast Component
+const Toast = ({ message, type, onClose }) => {
+    useEffect(() => {
+        const timer = setTimeout(onClose, 5000);
+        return () => clearTimeout(timer);
+    }, [onClose]);
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
+            className={`fixed bottom-6 right-6 z-[100] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl border ${type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-red-50 border-red-100 text-red-800'
+                }`}
+        >
+            {type === 'success' ? (
+                <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-600">
+                    <Check size={18} />
+                </div>
+            ) : (
+                <div className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center text-red-600">
+                    <AlertCircle size={18} />
+                </div>
+            )}
+            <div className="flex flex-col">
+                <p className="font-bold text-sm leading-tight">{type === 'success' ? 'Success' : 'Error'}</p>
+                <p className="text-xs opacity-90 font-medium mt-0.5">{message}</p>
+            </div>
+            <button onClick={onClose} className="ml-2 p-1 hover:bg-black/5 rounded-lg transition-colors">
+                <X size={16} />
+            </button>
+        </motion.div>
+    );
+};
+
+
+// Convert raw base64 string or URL to a displayable src
 // Convert raw base64 string or URL to a displayable src
 function resolveLogoSrc(raw) {
     if (!raw) return null;
-    // Log to console for debugging what backend returns
-    console.debug("[Branding] Resolving logo source:", typeof raw === 'string' ? raw.substring(0, 50) + '...' : 'Not a string');
 
     if (typeof raw !== 'string') return null;
     let str = raw.trim();
@@ -32,27 +68,33 @@ function resolveLogoSrc(raw) {
 
     // Web URIs or Data URIs
     if (str.startsWith('data:') || str.startsWith('http://') || str.startsWith('https://')) {
-        // Force direct backend IP calls to go through local proxy
-        if (str.includes('65.1.249.160')) {
-            return str.replace(/https?:\/\/65\.1\.249\.160/, '/api');
+        // Force direct backend IP calls to go through local proxy to avoid CORS/access issues
+        if (str.includes('65.1.249.160') || str.includes('52.66.143.164')) {
+            return str.replace(/https?:\/\/(65\.1\.249\.160|52\.66\.143\.164)/, '/api');
         }
         return str;
     }
 
-    // Relative paths from backend (e.g., /media/..., media/...)
-    if (str.startsWith('/') || str.startsWith('media/') || /\.(png|jpe?g|gif|svg|webp|ico)(\?.*)?$/i.test(str)) {
+    // Relative paths from backend (e.g., /media/..., /uploads/...)
+    if (
+        str.startsWith('/') ||
+        str.startsWith('media/') ||
+        str.startsWith('uploads/')
+    ) {
         let path = str.startsWith('/') ? str : `/${str}`;
+
+        // Handle case where backend already returned /api/...
         if (path.startsWith('/api/')) return path;
 
-        const baseUrl = import.meta.env.VITE_API_BASE_URL && import.meta.env.VITE_API_BASE_URL !== '/api'
-            ? import.meta.env.VITE_API_BASE_URL.replace(/\/api$/, '')
-            : '/api'; // Use proxy in dev or relative base in prod
+        // Use environment variable or default to /api proxy
+        const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
         return `${baseUrl}${path}`;
     }
 
+    // Must be a raw base64 string — detect MIME from magic bytes
     try {
         const header = str.substring(0, 12);
-        let mime = 'image/png';
+        let mime = 'image/png'; // default
         if (header.startsWith('/9j/')) mime = 'image/jpeg';
         else if (header.startsWith('iVBOR')) mime = 'image/png';
         else if (header.startsWith('PHN2') || header.startsWith('PD94')) mime = 'image/svg+xml';
@@ -84,6 +126,11 @@ export default function Branding() {
     const [logoPreview, setLogoPreview] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [toast, setToast] = useState(null);
+
+    const showToast = useCallback((message, type = 'success') => {
+        setToast({ message, type });
+    }, []);
     // Track locally-selected logo URL so we don't lose it when currentOrg updates after save
     const localLogoUrl = useRef(null);
 
@@ -127,23 +174,21 @@ export default function Branding() {
                 showToast("File size too large. Please select an image under 2MB.", "error");
                 return;
             }
-            setLogoFile(file);
-            const blobUrl = URL.createObjectURL(file);
-            setLogoPreview(blobUrl);
-            localLogoUrl.current = blobUrl; // remember the local URL
+
+            // Automate Base64 conversion
+            setLogoFile(file); // Store actual File object for upload
+
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64String = reader.result;
+                setLogoPreview(base64String);
+                localLogoUrl.current = base64String;
+                showToast("Logo selected");
+            };
+            reader.readAsDataURL(file);
         }
     };
 
-    const convertToBase64 = () => {
-        if (!logoFile || typeof logoFile === 'string') return; // Already base64 or no file
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            setLogoPreview(reader.result);
-            setLogoFile(reader.result); // Store base64 string instead of File
-            showToast("Logo converted to optimized format");
-        };
-        reader.readAsDataURL(logoFile);
-    };
 
     const handleRemoveLogo = () => {
         setFormData(prev => ({ ...prev, logo: null }));
@@ -154,33 +199,15 @@ export default function Branding() {
     };
 
     const handleSave = async () => {
-        setIsSaving(true);
-        dispatch(clearOrgError());
-
-        const data = new FormData();
-        data.append('full_name', formData.clinicName);
-        data.append('name', formData.clinicName);
-        data.append('email', formData.email);
-        data.append('phone_number', formData.phone);
-        data.append('phone', formData.phone);
-        if (formData.address) data.append('address', formData.address);
-        if (logoFile) {
-            if (typeof logoFile === 'string' && logoFile.startsWith('data:')) {
-                // It's already base64
-                data.append('logo', logoFile);
-            } else {
-                // It's a File object
-                data.append('logo', logoFile);
-            }
-        } else if (logoPreview === null && currentOrg?.logo) {
-            // If logo was removed and there was a previous logo, send a signal to clear it
-            data.append('logo', '');
-        }
-        data.append('brand_color', formData.brandColor);
-        data.append('brandColor', formData.brandColor);
-
         try {
-            await dispatch(updateHospitalProfile(data)).unwrap();
+            // Only send fields supported by /admin/hospital/profile PUT endpoint
+            const payload = {
+                phone_number: formData.phone,
+                address: formData.address,
+                logo: logoFile // This is the File object or null
+            };
+
+            await dispatch(updateHospitalProfile(payload)).unwrap();
             setIsSaving(false);
             setShowSuccess(true);
             setTimeout(() => setShowSuccess(false), 3000);
@@ -247,9 +274,9 @@ export default function Branding() {
                                 <input
                                     type="text"
                                     name="clinicName"
-                                    value={formData.org_name}
-                                    disabled
-                                    className="w-full px-4 py-3 bg-slate-100 border border-slate-200 rounded-xl text-sm font-semibold text-slate-500 cursor-not-allowed"
+                                    value={formData.clinicName}
+                                    onChange={handleInputChange}
+                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none transition-all text-sm font-semibold text-slate-700 placeholder:font-normal"
                                     placeholder="e.g. Sunrise Mental Health Clinic"
                                 />
                             </div>
@@ -359,17 +386,6 @@ export default function Branding() {
                                             >
                                                 Change Logo
                                             </label>
-                                            {logoFile && typeof logoFile !== 'string' && (
-                                                <button
-                                                    type="button"
-                                                    onClick={convertToBase64}
-                                                    className="px-4 py-2 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-xl text-[11px] font-bold hover:bg-emerald-100 transition-all flex items-center justify-center gap-1.5"
-                                                    title="Convert to Base64 for better compatibility"
-                                                >
-                                                    <Sparkles size={12} />
-                                                    Optimize Format
-                                                </button>
-                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -554,10 +570,10 @@ export default function Branding() {
                         </div>
                     </motion.div>
                 </div>
-            </div >
+            </div>
 
             {/* Action Bar */}
-            < div className="mt-10 pt-8 border-t border-slate-100 flex items-center justify-between" >
+            <div className="mt-10 pt-8 border-t border-slate-100 flex items-center justify-between" >
                 <p className="text-sm text-slate-400 font-medium">
                     {showSuccess ? '✓ All changes have been saved.' : 'Unsaved changes will not take effect until saved.'}
                 </p>
@@ -602,7 +618,17 @@ export default function Branding() {
                         )}
                     </button>
                 </div>
-            </div >
-        </div >
+            </div>
+
+            <AnimatePresence>
+                {toast && (
+                    <Toast
+                        message={toast.message}
+                        type={toast.type}
+                        onClose={() => setToast(null)}
+                    />
+                )}
+            </AnimatePresence>
+        </div>
     );
 }

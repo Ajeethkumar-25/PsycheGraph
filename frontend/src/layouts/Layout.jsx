@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
 import { logout, clearSuccessMessage, fetchUserProfile } from '../store/slices/AllLoginSlice';
 import { fetchHospitalProfile } from '../store/slices/OrgSlice';
-import { fetchAppointments } from '../store/slices/AppointmentSlice';
+import { fetchAppointments, fetchUpdatedAppointments, dismissNotification } from '../store/slices/AppointmentSlice';
 import {
     LayoutDashboard,
     Users,
@@ -43,33 +43,35 @@ function cn(...inputs) {
 
 // Convert raw base64 string or URL to a displayable src
 function resolveLogoSrc(raw) {
-    if (!raw || typeof raw !== 'string') return null;
+    if (!raw) return null;
 
+    if (typeof raw !== 'string') return null;
     let str = raw.trim();
-    // Strip Python bytes-literal wrapper: b'...' or b"..."
     if (str.startsWith("b'") && str.endsWith("'")) str = str.slice(2, -1);
     if (str.startsWith('b"') && str.endsWith('"')) str = str.slice(2, -1);
 
     // Web URIs or Data URIs
     if (str.startsWith('data:') || str.startsWith('http://') || str.startsWith('https://')) {
         // Force direct backend IP calls to go through local proxy to avoid CORS/access issues
-        if (str.includes('65.1.249.160')) {
-            return str.replace(/https?:\/\/65\.1\.249\.160/, '/api');
+        if (str.includes('65.1.249.160') || str.includes('52.66.143.164')) {
+            return str.replace(/https?:\/\/(65\.1\.249\.160|52\.66\.143\.164)/, '/api');
         }
         return str;
     }
 
-    // Relative paths from backend (e.g., /media/..., media/...)
-    if (str.startsWith('/') || str.startsWith('media/') || /\.(png|jpe?g|gif|svg|webp|ico)(\?.*)?$/i.test(str)) {
+    // Relative paths from backend (e.g., /media/..., /uploads/...)
+    if (
+        str.startsWith('/') ||
+        str.startsWith('media/') ||
+        str.startsWith('uploads/')
+    ) {
         let path = str.startsWith('/') ? str : `/${str}`;
 
         // Handle case where backend already returned /api/...
         if (path.startsWith('/api/')) return path;
 
-        const baseUrl = import.meta.env.VITE_API_BASE_URL && import.meta.env.VITE_API_BASE_URL !== '/api'
-            ? import.meta.env.VITE_API_BASE_URL.replace(/\/api$/, '')
-            : '/api'; // Use proxy in dev or relative base in prod
-
+        // Use environment variable or default to /api proxy
+        const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
         return `${baseUrl}${path}`;
     }
 
@@ -96,8 +98,10 @@ export default function Layout() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const [isNotificationOpen, setIsNotificationOpen] = useState(false);
     const profileRef = useRef(null);
     const sidebarProfileRef = useRef(null);
+    const notificationRef = useRef(null);
 
     const { user, successMessage } = useSelector((state) => state.auth);
     const { currentOrg } = useSelector((state) => state.organizations || {});
@@ -106,14 +110,14 @@ export default function Layout() {
         pendingNotes: false,
         patientUpdates: false
     });
-    const { list: appointments } = useSelector((state) => state.appointments || { list: [] });
-    const [activeReminders, setActiveReminders] = useState([]);
     const notifiedRef = useRef(new Set());
+    const { list: appointments, updatedList } = useSelector((state) => state.appointments || { list: [], updatedList: [] });
+    const [activeReminders, setActiveReminders] = useState([]);
 
     // Check if ANY notification is turned on
     const hasAnyNotificationEnabled = Object.values(notifications).some(val => val === true);
 
-    const userRole = (user?.role || user?.user?.role)?.toUpperCase();
+    const userRole = (user?.role || user?.user?.role || user?.user_role)?.toUpperCase();
 
     const getRoleConfig = (role) => {
         switch (role) {
@@ -165,6 +169,9 @@ export default function Layout() {
             }
             if (sidebarProfileRef.current && !sidebarProfileRef.current.contains(event.target)) {
                 setIsProfileOpen(false);
+            }
+            if (notificationRef.current && !notificationRef.current.contains(event.target)) {
+                setIsNotificationOpen(false);
             }
         }
         document.addEventListener("mousedown", handleClickOutside);
@@ -257,11 +264,23 @@ export default function Layout() {
 
 
     useEffect(() => {
-        // Fetch hospital profile only for admin roles. 
-        // Doctors and receptionists should get their organization data through other means or profile.
-        if (userRole === 'ADMIN' || userRole === 'HOSPITAL') {
+        // Fetch hospital profile for all roles (except SUPER_ADMIN) so that doctors
+        // and receptionists get the correct organization name and logo for the sidebar.
+        if (userRole !== 'SUPER_ADMIN') {
             dispatch(fetchHospitalProfile());
         }
+    }, [dispatch, userRole]);
+
+    // Fetch updated appointments periodically for Receptionists
+    useEffect(() => {
+        if (userRole !== 'RECEPTIONIST') return;
+
+        dispatch(fetchUpdatedAppointments());
+        const interval = setInterval(() => {
+            dispatch(fetchUpdatedAppointments());
+        }, 60000); // Check every minute
+
+        return () => clearInterval(interval);
     }, [dispatch, userRole]);
 
     if (userRole === 'SUPER_ADMIN') {
@@ -421,26 +440,32 @@ export default function Layout() {
                 )}>
                     <div className="flex items-center gap-3 w-full">
                         {(() => {
-                            // Use org logo for all roles if available from hospital profile
-                            const rawLogo = currentOrg?.logo
-                                || currentOrg?.logo_url
-                                || currentOrg?.profile_picture
-                                || currentOrg?.image;
+                            const orgProfile = currentOrg || user?.organization || user?.hospital || user?.doctor || user?.user || user;
+                            const rawLogo = orgProfile?.logo_url || orgProfile?.organization_logo || orgProfile?.logo || user?.organization_logo;
                             const logoSrc = resolveLogoSrc(rawLogo);
-                            return logoSrc ? (
-                                <motion.img
-                                    whileHover={{ scale: 1.05 }}
-                                    src={logoSrc}
-                                    alt="Organization Logo"
-                                    className="h-10 w-10 object-contain rounded-xl shrink-0 bg-white/10 p-1"
-                                    onError={(e) => { e.target.style.display = 'none'; }}
-                                />
-                            ) : (
+
+                            if (logoSrc) {
+                                return (
+                                    <motion.img
+                                        whileHover={{ scale: 1.05 }}
+                                        src={logoSrc}
+                                        alt="Organization Logo"
+                                        className="h-10 w-10 object-contain rounded-xl shrink-0 bg-white/10 p-1"
+                                        onError={(e) => { e.target.style.display = 'none'; }}
+                                    />
+                                );
+                            }
+
+                            // Fallback icons based on role
+                            return (
                                 <motion.div
                                     whileHover={{ scale: 1.05, rotate: 5 }}
-                                    className="bg-gradient-to-br from-blue-500 to-cyan-500 p-2 rounded-xl text-white shadow-lg shadow-cyan-500/30 flex-shrink-0"
+                                    className={cn(
+                                        "p-2 rounded-xl text-white shadow-lg flex-shrink-0 bg-gradient-to-br",
+                                        userRole === 'SUPER_ADMIN' ? "from-blue-500 to-cyan-500 shadow-cyan-500/30" : "from-slate-600 to-slate-700 shadow-slate-900/30"
+                                    )}
                                 >
-                                    <BrainCircuit size={24} />
+                                    {userRole === 'SUPER_ADMIN' ? <BrainCircuit size={24} /> : <Building2 size={24} />}
                                 </motion.div>
                             );
                         })()}
@@ -451,9 +476,16 @@ export default function Layout() {
                                 exit={{ opacity: 0 }}
                                 className="flex-1 overflow-hidden"
                             >
-                                <span className="text-xl font-black text-white tracking-tight block leading-none truncate"
-                                    title={currentOrg?.full_name || currentOrg?.name || 'PsycheGraph'}>
-                                    {currentOrg?.full_name || currentOrg?.name || 'PsycheGraph'}
+                                <span className="text-xl font-black text-white tracking-tight block leading-none truncate">
+                                    {(() => {
+                                        const name = currentOrg?.org_name || currentOrg?.full_name || currentOrg?.name
+                                            || user?.organization?.org_name || user?.organization?.full_name || user?.organization?.name
+                                            || user?.user?.organization?.org_name || user?.user?.organization?.full_name || user?.user?.organization?.name
+                                            || user?.org_name || user?.organization_name || user?.hospital?.name || user?.hospital?.org_name;
+
+                                        if (name) return name;
+                                        return userRole === 'SUPER_ADMIN' ? 'PsycheGraph' : '';
+                                    })()}
                                 </span>
                                 <div className="flex items-center gap-2 mt-1">
                                     <span className={cn(
@@ -575,6 +607,105 @@ export default function Layout() {
                                 <Bell size={20} className="text-white/80 group-hover:text-white transition-colors" />
                                 <span className="absolute top-2 right-2.5 w-2 h-2 rounded-full bg-red-500 ring-2 ring-[#062f3f]" />
                             </motion.button>
+                        )}
+
+                        {/* Receptionist Notification Icon */}
+                        {userRole === 'RECEPTIONIST' && (
+                            <div className="relative" ref={notificationRef}>
+                                <motion.button
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => setIsNotificationOpen(!isNotificationOpen)}
+                                    className={cn(
+                                        "relative p-2.5 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-white/5 group",
+                                        isNotificationOpen && "bg-white/10 border-white/20"
+                                    )}
+                                >
+                                    <Bell size={20} className="text-white/80 group-hover:text-white transition-colors" />
+                                    {updatedList?.length > 0 && (
+                                        <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full border-2 border-[#062f3f] flex items-center justify-center">
+                                            {updatedList.length}
+                                        </span>
+                                    )}
+                                </motion.button>
+
+                                <AnimatePresence>
+                                    {isNotificationOpen && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                            className="absolute right-0 mt-3 w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden"
+                                        >
+                                            <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                                                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Reschedule Alerts</h3>
+                                                {updatedList?.length > 0 && (
+                                                    <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-600 text-[10px] font-bold rounded">
+                                                        {updatedList.length} New
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="max-h-[320px] overflow-y-auto custom-scrollbar">
+                                                {updatedList?.length > 0 ? (
+                                                    <div className="divide-y divide-slate-50">
+                                                        {updatedList.map((app) => (
+                                                            <div key={app.id} className="p-4 hover:bg-slate-50 transition-colors flex gap-3 relative group">
+                                                                <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                                                                    <Calendar size={18} className="text-indigo-600" />
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-sm font-bold text-slate-900 truncate">
+                                                                        {app.patient_name || 'Patient'}
+                                                                    </p>
+                                                                    <div className="flex items-center gap-2 mt-1">
+                                                                        <span className="text-[11px] font-medium text-slate-500">
+                                                                            {new Date(app.start_time).toLocaleDateString([], { month: 'short', day: 'numeric' })} at {new Date(app.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                        </span>
+                                                                    </div>
+                                                                    {app.doctor_name && (
+                                                                        <p className="text-[10px] font-bold text-indigo-500 uppercase mt-1">
+                                                                            Dr. {app.doctor_name.split(' ').pop()}
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        dispatch(dismissNotification(app.id));
+                                                                    }}
+                                                                    className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all absolute top-2 right-2 opacity-0 group-hover:opacity-100"
+                                                                >
+                                                                    <X size={14} />
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <div className="py-12 px-8 text-center">
+                                                        <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-3">
+                                                            <Bell size={24} className="text-slate-200" />
+                                                        </div>
+                                                        <p className="text-xs font-bold text-slate-400">All caught up!</p>
+                                                        <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider">No new reschedule alerts</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {updatedList?.length > 0 && (
+                                                <div className="p-2 border-t border-slate-100 bg-slate-50/50">
+                                                    <button
+                                                        onClick={() => {
+                                                            updatedList.forEach(app => dispatch(dismissNotification(app.id)));
+                                                        }}
+                                                        className="w-full py-2 text-[10px] font-bold text-slate-400 hover:text-indigo-600 uppercase tracking-widest transition-colors"
+                                                    >
+                                                        Clear All
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
                         )}
 
                         <div className="hidden sm:block h-10 w-px bg-slate-200/20 mx-2" />

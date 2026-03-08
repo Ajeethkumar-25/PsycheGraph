@@ -65,10 +65,17 @@ export default function ReceptionistAppointments() {
     const itemsPerPage = 6;
 
     useEffect(() => {
-        console.log("Fetching Appointments, Patients, and Users...");
+        console.log("Fetching Appointments, Patients, Users, and Current Profile...");
         dispatch(fetchAppointments());
         dispatch(fetchPatients());
         dispatch(fetchUsers());
+
+        // Dynamic import to avoid dependency issues if fetchUserProfile isn't exported directly
+        import('../../store/slices/AllLoginSlice').then(module => {
+            if (module.fetchUserProfile) {
+                dispatch(module.fetchUserProfile());
+            }
+        });
     }, [dispatch]);
 
 
@@ -81,23 +88,23 @@ export default function ReceptionistAppointments() {
             currentUser?.doctor?.assigned_doctors;
 
         if (Array.isArray(profileAssignedDoctors) && profileAssignedDoctors.length > 0) {
-            console.log("Profile Assigned Doctors List:", profileAssignedDoctors);
-            console.log("Global Users List Data:", users);
-
             return profileAssignedDoctors.map((d) => {
                 // The `id` in assigned_doctors is the junction table ID (e.g., 1, 2, 3), not the doctor's actual ID!
                 // We MUST find the doctor in the global users array by their name to get their true `id`.
-                const matchingUser = users.find(u =>
-                    u.role === 'DOCTOR' &&
-                    (u.full_name === d.full_name || u.name === d.full_name || u.full_name === d.name)
-                );
+                const searchName = (d.full_name || d.name || "").toLowerCase().replace(/^dr\.?\s+/i, "").trim();
+
+                const matchingUser = users.find(u => {
+                    if (u.role !== 'DOCTOR' && !u.is_doctor) return false;
+                    const uName = (u.full_name || u.name || "").toLowerCase().replace(/^dr\.?\s+/i, "").trim();
+                    return uName === searchName || String(u.id) === String(d.id) || String(u.user_id) === String(d.id);
+                });
 
                 // If found, use their true global user ID, otherwise fallback to the junction ID (which will likely fail but at least it won't crash)
                 const realDoctorId = matchingUser?.id || matchingUser?.user_id || d.id;
 
                 return {
                     id: String(realDoctorId),
-                    full_name: d.full_name || d.name || "Unknown Doctor",
+                    full_name: matchingUser?.full_name || d.full_name || d.name || "Unknown Doctor",
                     role: 'DOCTOR'
                 };
             });
@@ -114,14 +121,9 @@ export default function ReceptionistAppointments() {
             }];
         }
 
-        // Fallback to global users list filtered by role (if data exists)
-        return users
-            .filter(u => (u.role === 'DOCTOR' || u.is_doctor))
-            .map(u => ({
-                id: String(u.id || u.doctor_id),
-                full_name: u.full_name || u.name || "Unknown Doctor",
-                role: 'DOCTOR'
-            }));
+        // Strictly return NO doctors if no assignments are found, rather than falling back to global list.
+        // This ensures receptionists only work with their specific assigned doctors.
+        return [];
     }, [users, currentUser]);
 
     const filteredAppointments = useMemo(() => {
@@ -239,12 +241,12 @@ export default function ReceptionistAppointments() {
         }
     }, [formData.doctor_id, doctors]);
 
-    // Auto-select removed per user request
-    // useEffect(() => {
-    //     if (isModalOpen && !isRescheduling && doctors.length > 0 && !formData.doctor_id) {
-    //         setFormData(prev => ({ ...prev, doctor_id: String(doctors[0].id) }));
-    //     }
-    // }, [doctors, isModalOpen, isRescheduling, formData.doctor_id]);
+    // Auto-select doctor if exactly one is assigned to the receptionist
+    useEffect(() => {
+        if (isModalOpen && !isRescheduling && doctors.length === 1 && !formData.doctor_id) {
+            setFormData(prev => ({ ...prev, doctor_id: String(doctors[0].id) }));
+        }
+    }, [doctors, isModalOpen, isRescheduling, formData.doctor_id]);
     const handleNextStep = () => {
         if (step === 1 && formData.patient_id && formData.doctor_id) {
             setStep(2);
@@ -253,6 +255,18 @@ export default function ReceptionistAppointments() {
 
     const handlePrevStep = () => {
         setStep(1);
+    };
+
+    const handlePatientChange = (patientId) => {
+        const selectedPatient = patients.find(p => String(p.id) === String(patientId));
+        setFormData(prev => ({
+            ...prev,
+            patient_id: patientId,
+            // Auto-select the patient's assigned doctor if they are in the receptionist's assigned list
+            doctor_id: selectedPatient?.doctor_id && doctors.some(d => String(d.id) === String(selectedPatient.doctor_id))
+                ? String(selectedPatient.doctor_id)
+                : (doctors.length === 1 ? String(doctors[0].id) : prev.doctor_id)
+        }));
     };
 
     const closeModal = () => {
@@ -350,9 +364,7 @@ export default function ReceptionistAppointments() {
             if (isRescheduling && editingAppointment) {
                 const reschedulePayload = {
                     start_time: startDateTime.toISOString(),
-                    end_time: endDateTime.toISOString(),
-                    notes: formData.notes,
-                    meet_link: visitType === 'Video' ? formData.meet_link : null
+                    end_time: endDateTime.toISOString()
                 };
 
                 await dispatch(rescheduleAppointment({
@@ -554,27 +566,38 @@ export default function ReceptionistAppointments() {
                     </table>
                 </div>
 
-                {/* Pagination (Simplified consistent with other pages) */}
+                {/* Pagination (Synced with Users.jsx style) */}
                 {filteredAppointments.length > itemsPerPage && (
                     <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/30">
-                        <p className="text-xs font-bold text-slate-400">
+                        <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">
                             Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredAppointments.length)} of {filteredAppointments.length} sessions
-                        </p>
-                        <div className="flex items-center gap-2">
+                        </div>
+                        <div className="flex items-center gap-1.5">
                             <button
                                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                                 disabled={currentPage === 1}
-                                className="p-2 rounded-lg border border-slate-200 bg-white disabled:opacity-50"
+                                className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-all"
                             >
-                                <ChevronLeft size={16} />
+                                <ChevronLeft size={14} />
                             </button>
-                            <span className="text-xs font-black px-4">{currentPage}</span>
+                            {[...Array(Math.ceil(filteredAppointments.length / itemsPerPage))].map((_, i) => (
+                                <button
+                                    key={i}
+                                    onClick={() => setCurrentPage(i + 1)}
+                                    className={`w-7 h-7 rounded-lg text-xs font-bold transition-all ${currentPage === i + 1
+                                        ? "bg-indigo-500 text-white shadow-sm"
+                                        : "bg-white text-slate-600 border border-slate-200 hover:border-indigo-500 hover:text-indigo-500"
+                                        }`}
+                                >
+                                    {i + 1}
+                                </button>
+                            ))}
                             <button
                                 onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(filteredAppointments.length / itemsPerPage)))}
                                 disabled={currentPage === Math.ceil(filteredAppointments.length / itemsPerPage)}
-                                className="p-2 rounded-lg border border-slate-200 bg-white disabled:opacity-50"
+                                className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-all"
                             >
-                                <ChevronRight size={16} />
+                                <ChevronRight size={14} />
                             </button>
                         </div>
                     </div>
@@ -649,7 +672,7 @@ export default function ReceptionistAppointments() {
                                                         disabled={isRescheduling}
                                                         className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all font-medium text-slate-700 appearance-none disabled:opacity-75 disabled:cursor-not-allowed"
                                                         value={formData.patient_id}
-                                                        onChange={(e) => setFormData(prev => ({ ...prev, patient_id: e.target.value }))}
+                                                        onChange={(e) => handlePatientChange(e.target.value)}
                                                     >
                                                         <option value="">Select Patient</option>
                                                         {patients.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}

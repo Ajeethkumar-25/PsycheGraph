@@ -58,7 +58,6 @@ export default function AdminUsers() {
         email: '',
         password: '',
         role: 'DOCTOR',
-        shift_timing: '',
         license_key: '',
         doctor_ids: []
     });
@@ -94,9 +93,24 @@ export default function AdminUsers() {
             const rawIds = user.assigned_doctors || user.assigned_doctor_user_ids || user.doctor_ids || user.assigned_doctor_ids;
 
             if (Array.isArray(rawIds)) {
-                normalizedDoctorIds = rawIds.map(d =>
-                    typeof d === 'object' && d !== null ? (d.id || d.doctor_id || d.user_id) : parseInt(d)
-                ).filter(id => !isNaN(id));
+                normalizedDoctorIds = rawIds.map(d => {
+                    if (typeof d === 'object' && d !== null) {
+                        // Try to find the actual user ID. Sometimes junction IDs are returned instead of user IDs.
+                        const id = d.user_id || d.doctor_id || d.id;
+                        const name = d.full_name || d.name;
+
+                        // If we have a name but no clear ID, or if the ID might be a junction ID, look it up in users list
+                        if (name) {
+                            const matchingDoc = users.find(u =>
+                                u.role === 'DOCTOR' &&
+                                (u.full_name === name || u.name === name)
+                            );
+                            if (matchingDoc) return parseInt(matchingDoc.id);
+                        }
+                        return parseInt(id);
+                    }
+                    return parseInt(d);
+                }).filter(id => !isNaN(id));
             } else if (user.doctor_id || user.assigned_doctor_id) {
                 normalizedDoctorIds = [parseInt(user.doctor_id || user.assigned_doctor_id)];
             } else if (typeof rawIds === 'string') {
@@ -108,7 +122,6 @@ export default function AdminUsers() {
                 email: user.email,
                 password: '',
                 role: user.role,
-                shift_timing: user.shift_timing || '',
                 license_key: user.license_key || currentUser?.license_key || '',
                 doctor_ids: normalizedDoctorIds
             });
@@ -119,7 +132,6 @@ export default function AdminUsers() {
                 email: '',
                 password: '',
                 role: 'DOCTOR',
-                shift_timing: '',
                 license_key: currentUser?.license_key || '',
                 doctor_ids: []
             });
@@ -147,8 +159,11 @@ export default function AdminUsers() {
         }
 
         if (payload.role === 'RECEPTIONIST') {
-            payload.assigned_doctor_user_ids = (payload.doctor_ids || []).map(id => parseInt(id)).filter(id => !isNaN(id));
-            delete payload.doctor_ids;
+            const ids = (payload.doctor_ids || []).map(id => parseInt(id)).filter(id => !isNaN(id));
+            payload.assigned_doctor_user_ids = ids;
+            // Send multiple variations of the key to ensure compatibility with different backend expectations
+            payload.doctor_ids = ids;
+            payload.assigned_doctor_ids = ids;
         }
 
         let result;
@@ -160,11 +175,8 @@ export default function AdminUsers() {
             }));
             if (!result.error) showToast('User updated successfully');
         } else {
-            if (payload.role === 'RECEPTIONIST' && !payload.shift_timing) payload.shift_timing = "General";
-
             const { role, organization_id, ...cleanPayload } = payload;
             if (role === 'DOCTOR') {
-                delete cleanPayload.shift_timing;
                 delete cleanPayload.doctor_id;
                 delete cleanPayload.doctor_ids;
             }
@@ -582,16 +594,6 @@ export default function AdminUsers() {
                                                         <p className="text-sm text-slate-400 italic py-2">No doctors available to assign.</p>
                                                     )}
                                                 </div>
-                                            </div>
-                                            <div className="col-span-2">
-                                                <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Shift Timing</label>
-                                                <input
-                                                    type="text"
-                                                    value={formData.shift_timing}
-                                                    onChange={(e) => setFormData({ ...formData, shift_timing: e.target.value })}
-                                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-[#24c4a4]/10 focus:border-[#24c4a4] outline-none transition-all text-[13px] font-bold text-slate-700 placeholder:text-slate-300"
-                                                    placeholder="e.g. 9 AM - 5 PM"
-                                                />
                                             </div>
                                         </>
                                     )}

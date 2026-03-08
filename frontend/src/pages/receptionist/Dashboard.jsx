@@ -13,7 +13,8 @@ import {
     TrendingUp,
     ArrowUpRight,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+    AlertTriangle
 } from 'lucide-react';
 import { fetchPatients } from '../../store/slices/PatientSlice';
 import { fetchAppointments } from '../../store/slices/AppointmentSlice';

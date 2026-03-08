@@ -88,7 +88,7 @@ export const fetchUserProfile = createAsyncThunk('auth/fetchProfile', async (_, 
 
         // Dynamic import to avoid circular dependency if any
         const AllUserService = (await import('../../services/AllUserService')).default;
-        const profileData = await AllUserService.fetchUserById(user.id);
+        const profileData = await AllUserService.fetchUserById(user.id, userRole);
         return profileData;
     } catch (error) {
         return rejectWithValue(formatError(error));

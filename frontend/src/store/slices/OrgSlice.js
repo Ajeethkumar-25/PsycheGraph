@@ -64,17 +64,21 @@ export const setWorkingHours = createAsyncThunk('organizations/setWorkingHours',
     }
 });
 
-export const fetchHospitalProfile = createAsyncThunk('organizations/fetchHospitalProfile', async (_, { rejectWithValue }) => {
+export const fetchHospitalProfile = createAsyncThunk('organizations/fetchHospitalProfile', async (_, { getState, rejectWithValue }) => {
     try {
-        return await OrgService.getHospitalProfile();
+        const { auth } = getState();
+        const org_id = auth.user?.organization_id;
+        return await OrgService.getHospitalProfile(org_id);
     } catch (error) {
         return rejectWithValue(formatError(error));
     }
 });
 
-export const updateHospitalProfile = createAsyncThunk('organizations/updateHospitalProfile', async (data, { rejectWithValue }) => {
+export const updateHospitalProfile = createAsyncThunk('organizations/updateHospitalProfile', async (data, { getState, rejectWithValue }) => {
     try {
-        return await OrgService.updateHospitalProfile(data);
+        const { auth } = getState();
+        const org_id = auth.user?.organization_id;
+        return await OrgService.updateHospitalProfile(org_id, data);
     } catch (error) {
         return rejectWithValue(formatError(error));
     }

@@ -191,26 +191,12 @@ export default function DoctorPatients() {
             const startDateTime = new Date(`${rescheduleModal.date}T${rescheduleModal.time}`);
             const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000); // Assuming 1 hr
 
-            // 1. Create New Availability Slot
-            const slotAction = await dispatch(createAvailability({
-                doctor_id: rescheduleModal.doctorId,
-                start_time: startDateTime.toISOString(),
-                end_time: endDateTime.toISOString()
-            }));
-
-            if (createAvailability.rejected.match(slotAction)) {
-                throw new Error(slotAction.payload || "Failed to create new time slot");
-            }
-            const slot = slotAction.payload;
-
-            // 2. Reschedule Appointment
+            // Reschedule Appointment - Simplified payload matching existing standard patterns
             await dispatch(rescheduleAppointment({
                 id: rescheduleModal.appointmentId,
                 data: {
                     start_time: startDateTime.toISOString(),
-                    end_time: endDateTime.toISOString(),
-                    new_availability_id: slot.id,
-                    patient_age: rescheduleModal.patientAge
+                    end_time: endDateTime.toISOString()
                 }
             })).unwrap();
 

@@ -50,8 +50,13 @@ const AllUserService = {
         }
     },
 
-    fetchUserById: async (id) => {
-        const endpoint = `/users/${id}`;
+    fetchUserById: async (id, role) => {
+        let endpoint = `/users/${id}`;
+        // Map roles to specific fetch endpoints if they differ from the generic /users/
+        if (role === 'DOCTOR') endpoint = `/admin/doctors/${id}`;
+        else if (role === 'RECEPTIONIST') endpoint = `/admin/receptionists/${id}`;
+        else if (role === 'HOSPITAL' || role === 'ADMIN') endpoint = `/admin/hospitals/${id}`;
+
         const response = await api.get(endpoint);
         return response.data;
     },
@@ -66,11 +71,11 @@ const AllUserService = {
         // Strip fields not allowed by backend schemas
         const { role: r, organization_id, ...cleanData } = userData;
 
-        // Ensure assigned_doctor_user_ids is always an array for RECEPTIONIST
+        // Ensure assignment keys are consistently named if present
         if (role === 'RECEPTIONIST') {
-            cleanData.assigned_doctor_user_ids = Array.isArray(cleanData.assigned_doctor_user_ids)
-                ? cleanData.assigned_doctor_user_ids
-                : [];
+            const ids = cleanData.assigned_doctor_user_ids || cleanData.doctor_ids || cleanData.assigned_doctor_ids || [];
+            cleanData.assigned_doctor_user_ids = Array.isArray(ids) ? ids : [];
+            cleanData.doctor_ids = cleanData.assigned_doctor_user_ids;
         }
 
         const response = await api.post(endpoint, cleanData);
@@ -86,11 +91,12 @@ const AllUserService = {
         // Strip fields not allowed by backend schemas
         const { role: r, organization_id, ...cleanData } = data;
 
-        // Ensure assigned_doctor_user_ids is always an array for RECEPTIONIST
+        // Ensure assignment keys are consistently named if present
         if (role === 'RECEPTIONIST') {
-            cleanData.assigned_doctor_user_ids = Array.isArray(cleanData.assigned_doctor_user_ids)
-                ? cleanData.assigned_doctor_user_ids
-                : [];
+            const ids = cleanData.assigned_doctor_user_ids || cleanData.doctor_ids || cleanData.assigned_doctor_ids || [];
+            cleanData.assigned_doctor_user_ids = Array.isArray(ids) ? ids : [];
+            cleanData.doctor_ids = cleanData.assigned_doctor_user_ids;
+            cleanData.assigned_doctor_ids = cleanData.assigned_doctor_user_ids;
         }
 
         const response = await api.put(endpoint, cleanData);
@@ -98,10 +104,10 @@ const AllUserService = {
     },
 
     deleteUser: async (user_id, role) => {
-        let endpoint = `/users/${user_id}`;
+        let endpoint = `/admin/hospitals/${user_id}`; // Default for safety
         if (role === 'DOCTOR') endpoint = `/admin/doctors/${user_id}`;
         else if (role === 'RECEPTIONIST') endpoint = `/admin/receptionists/${user_id}`;
-        else if (role === 'HOSPITAL') endpoint = `/admin/hospitals/${user_id}`;
+        else if (role === 'HOSPITAL' || role === 'ADMIN') endpoint = `/admin/hospitals/${user_id}`;
 
         await api.delete(endpoint);
         return user_id;
